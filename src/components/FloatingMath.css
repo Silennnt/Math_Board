@@ -1,0 +1,38 @@
+#global-math-container {
+	position: fixed;
+	inset: 0;
+	z-index: 1;
+	pointer-events: none;
+	overflow: hidden;
+}
+
+.math-float {
+	position: absolute;
+	top: 0;
+	left: 0;
+	font-family: var(--font-mono, monospace);
+	font-size: var(--size);
+	color: var(--cyan);
+	pointer-events: none;
+	user-select: none;
+	white-space: nowrap;
+	will-change: transform, opacity;
+	animation: float-random var(--dur) linear var(--delay) infinite;
+}
+
+@keyframes float-random {
+	0% {
+		transform: translate(var(--startX), var(--startY)) rotate(var(--rotStart));
+		opacity: 0;
+	}
+	10% {
+		opacity: var(--base-opacity);
+	}
+	90% {
+		opacity: var(--base-opacity);
+	}
+	100% {
+		transform: translate(var(--endX), var(--endY)) rotate(var(--rotEnd));
+		opacity: 0;
+	}
+}
