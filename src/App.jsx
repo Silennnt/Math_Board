@@ -1,25 +1,42 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
+import Dashboard from "./pages/Dashboard";
 
-const Dashboard = () => (
-	<div style={{ padding: "2rem" }}>Panel Ucznia / Korepetytora</div>
-);
 const Room = () => (
-	<div style={{ padding: "2rem" }}>
-		Przestrzeń robocza tablicy interaktywnej
+	<div style={{ padding: "2rem", color: "white" }}>
+		Przestrzeń robocza tablicy interaktywnej - W budowie
 	</div>
 );
 
 function App() {
 	return (
-		<BrowserRouter>
-			<Routes>
-				<Route path="/" element={<Navigate to="/login" replace />} />
-				<Route path="/login" element={<Login />} />
-				<Route path="/dashboard" element={<Dashboard />} />
-				<Route path="/room/:roomId" element={<Room />} />
-			</Routes>
-		</BrowserRouter>
+		<AuthProvider>
+			<BrowserRouter>
+				<Routes>
+					<Route path="/" element={<Navigate to="/dashboard" replace />} />
+					<Route path="/login" element={<Login />} />
+
+					<Route
+						path="/dashboard"
+						element={
+							<ProtectedRoute>
+								<Dashboard />
+							</ProtectedRoute>
+						}
+					/>
+					<Route
+						path="/room/:roomId"
+						element={
+							<ProtectedRoute>
+								<Room />
+							</ProtectedRoute>
+						}
+					/>
+				</Routes>
+			</BrowserRouter>
+		</AuthProvider>
 	);
 }
 
