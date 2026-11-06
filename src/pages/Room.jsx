@@ -1,19 +1,26 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Stage, Layer, Line } from "react-konva";
-import { ref, onValue, push, remove } from "firebase/database";
-import { database } from "../firebase";
+import { Stage, Layer, Line, Rect } from "react-konva";
+import { ref as dbRef, onValue, push, remove } from "firebase/database";
+import {
+	ref as storageRef,
+	uploadString,
+	getDownloadURL,
+} from "firebase/storage";
+import { database, storage } from "../firebase";
 import "./Room.css";
 
 const Room = () => {
 	const { roomId } = useParams();
 	const navigate = useNavigate();
+	const stageRef = useRef(null);
 
 	const [lines, setLines] = useState([]);
 	const [currentLine, setCurrentLine] = useState(null);
 	const [isDrawing, setIsDrawing] = useState(false);
 	const [color, setColor] = useState("#00e5ff");
 	const [tool, setTool] = useState("pen");
+	const [isSaving, setIsSaving] = useState(false);
 
 	const [dimensions, setDimensions] = useState({
 		width: window.innerWidth,
@@ -28,9 +35,9 @@ const Room = () => {
 	}, []);
 
 	useEffect(() => {
-		const linesRef = ref(database, `rooms/${roomId}/lines`);
+		const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
 		const unsubscribe = onValue(
-			linesRef,
+			linesDbRef,
 			(snapshot) => {
 				const data = snapshot.val();
 				if (data) {
@@ -70,20 +77,53 @@ const Room = () => {
 	const handleMouseUp = () => {
 		setIsDrawing(false);
 		if (currentLine) {
-			const linesRef = ref(database, `rooms/${roomId}/lines`);
-			push(linesRef, currentLine).catch((error) => {
+			const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
+			push(linesDbRef, currentLine).catch((error) => {
 				console.error("Błąd zapisu w Firebase:", error);
-				alert("Brak uprawnień. Sprawdź reguły bazy danych Firebase.");
 			});
 			setCurrentLine(null);
 		}
 	};
 
 	const handleClear = () => {
-		const linesRef = ref(database, `rooms/${roomId}/lines`);
-		remove(linesRef).catch((error) => {
+		const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
+		remove(linesDbRef).catch((error) => {
 			console.error("Błąd usuwania w Firebase:", error);
 		});
+	};
+
+	const handleSaveAndExit = async () => {
+		if (!stageRef.current) return;
+		setIsSaving(true);
+
+		try {
+			const dataUrl = stageRef.current.toDataURL({ pixelRatio: 2 });
+
+			const timestamp = Date.now();
+			const imageRef = storageRef(
+				storage,
+				`rooms/${roomId}/screenshots/board_${timestamp}.png`,
+			);
+
+			await uploadString(imageRef, dataUrl, "data_url");
+			const downloadUrl = await getDownloadURL(imageRef);
+
+			const screenshotsDbRef = dbRef(database, `rooms/${roomId}/screenshots`);
+			await push(screenshotsDbRef, {
+				url: downloadUrl,
+				createdAt: new Date().toISOString(),
+			});
+
+			const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
+			await remove(linesDbRef);
+
+			navigate("/dashboard");
+		} catch (error) {
+			console.error("Błąd zapisu zrzutu ekranu:", error);
+			alert("Wystąpił błąd podczas zapisywania tablicy.");
+		} finally {
+			setIsSaving(false);
+		}
 	};
 
 	return (
@@ -129,11 +169,19 @@ const Room = () => {
 					<button className="tool-btn danger" onClick={handleClear}>
 						Wyczyść
 					</button>
+					<button
+						className="btn-save"
+						onClick={handleSaveAndExit}
+						disabled={isSaving}
+					>
+						{isSaving ? "Zapisywanie..." : "Zakończ i Zapisz"}
+					</button>
 				</div>
 			</div>
 
 			<div className="canvas-wrapper">
 				<Stage
+					ref={stageRef}
 					width={dimensions.width}
 					height={dimensions.height}
 					onMouseDown={handleMouseDown}
@@ -144,6 +192,14 @@ const Room = () => {
 					onTouchEnd={handleMouseUp}
 				>
 					<Layer>
+						{}
+						<Rect
+							x={0}
+							y={0}
+							width={dimensions.width}
+							height={dimensions.height}
+							fill="#0d1320"
+						/>
 						{lines.map((line, i) => (
 							<Line
 								key={i}
