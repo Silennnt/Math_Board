@@ -195,3 +195,31 @@
 	background: rgba(0, 229, 255, 0.1);
 	box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
 }
+.tutor-form {
+	display: flex;
+	gap: 15px;
+	justify-content: center;
+	align-items: center;
+	margin-top: 30px;
+	flex-wrap: wrap;
+}
+
+.tutor-input {
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	padding: 16px 20px;
+	border-radius: var(--r);
+	color: var(--text);
+	font-size: 1rem;
+	outline: none;
+	width: 100%;
+	max-width: 400px;
+	transition:
+		border-color 0.3s ease,
+		box-shadow 0.3s ease;
+}
+
+.tutor-input:focus {
+	border-color: var(--cyan);
+	box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
+}
