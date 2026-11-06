@@ -17,6 +17,9 @@ const Dashboard = () => {
 	const [students, setStudents] = useState([]);
 	const [selectedStudent, setSelectedStudent] = useState(null);
 
+	const [previewImage, setPreviewImage] = useState(null);
+	const [zoomScale, setZoomScale] = useState(1);
+
 	const isTutor = currentUser?.email === TUTOR_EMAIL;
 
 	useEffect(() => {
@@ -125,180 +128,222 @@ const Dashboard = () => {
 		});
 	};
 
-	return (
-		<div className="dashboard-container">
-			<header className="dashboard-header">
-				<div className="user-info">
-					<span className="user-email">{currentUser?.email}</span>
-					<span className="user-role">
-						{isTutor ? "Konto Prowadzącego" : "Konto Ucznia"}
-					</span>
+	const openPreview = (url) => {
+		setPreviewImage(url);
+		setZoomScale(1);
+		document.body.style.overflow = "hidden";
+	};
+
+	const closePreview = () => {
+		setPreviewImage(null);
+		setZoomScale(1);
+		document.body.style.overflow = "auto";
+	};
+
+	const handleZoomIn = () => setZoomScale((prev) => Math.min(prev + 0.5, 4));
+	const handleZoomOut = () => setZoomScale((prev) => Math.max(prev - 0.5, 0.5));
+
+	const renderGallery = () => {
+		if (screenshots.length === 0) {
+			return (
+				<div className="gallery-placeholder">
+					<p>Brak zapisanych zajęć.</p>
 				</div>
-				<button onClick={handleLogout} className="btn-logout">
-					Wyloguj się
-				</button>
-			</header>
+			);
+		}
 
-			<main className="dashboard-main">
-				{isTutor ? (
-					<div className="tutor-layout">
-						<aside className="student-list-container">
-							<h2 className="section-title">Twoi Uczniowie</h2>
-							{students.length > 0 ? (
-								<ul className="student-list">
-									{students.map((student) => (
-										<li
-											key={student.uid}
-											className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
-											onClick={() => setSelectedStudent(student)}
-										>
-											{student.email}
-										</li>
-									))}
-								</ul>
-							) : (
-								<p
-									className="gallery-placeholder"
-									style={{ padding: "20px", border: "none" }}
+		return (
+			<div className="gallery-grid">
+				{screenshots.map((shot) => (
+					<div key={shot.id} className="gallery-card">
+						<div
+							className="gallery-image-wrapper"
+							onClick={() => openPreview(shot.url)}
+						>
+							<img src={shot.url} alt="Zrzut tablicy z lekcji" loading="lazy" />
+							<div className="gallery-image-overlay">
+								<span>🔍 Kliknij, aby powiększyć</span>
+							</div>
+						</div>
+						<div className="gallery-info">
+							<span>{formatDate(shot.createdAt)}</span>
+							<div className="gallery-actions">
+								<button
+									onClick={() => openPreview(shot.url)}
+									className="btn-action btn-preview"
 								>
-									Brak aktywnych uczniów.
-								</p>
-							)}
-						</aside>
-
-						<section className="student-details-container">
-							{selectedStudent ? (
-								<>
-									<div
-										className="welcome-section"
-										style={{ marginBottom: "40px" }}
+									Podgląd
+								</button>
+								<a
+									href={shot.url}
+									target="_blank"
+									rel="noopener noreferrer"
+									className="btn-action btn-download"
+								>
+									Pobierz
+								</a>
+								{isTutor && (
+									<button
+										onClick={() => handleDeleteLesson(shot.id, shot.url)}
+										className="btn-action btn-delete"
 									>
-										<h1 style={{ fontSize: "1.8rem", marginBottom: "10px" }}>
-											{selectedStudent.email}
-										</h1>
-										<p style={{ marginBottom: "20px" }}>
-											Przeglądaj historię lekcji lub dołącz do aktywnej tablicy
-											ucznia.
-										</p>
-										<button
-											onClick={() => navigate(`/room/${selectedStudent.uid}`)}
-											className="btn-join-room"
-										>
-											Rozpocznij lekcję z tym uczniem
-										</button>
-									</div>
-
-									<section className="history-section">
-										<h2 className="section-title">Historia zajęć</h2>
-										{screenshots.length > 0 ? (
-											<div className="gallery-grid">
-												{screenshots.map((shot) => (
-													<div key={shot.id} className="gallery-card">
-														<div className="gallery-image-wrapper">
-															<img
-																src={shot.url}
-																alt="Zrzut tablicy z lekcji"
-																loading="lazy"
-															/>
-														</div>
-														<div className="gallery-info">
-															<span>{formatDate(shot.createdAt)}</span>
-															<div className="gallery-actions">
-																<a
-																	href={shot.url}
-																	target="_blank"
-																	rel="noopener noreferrer"
-																	className="btn-download"
-																>
-																	Pobierz
-																</a>
-																<button
-																	onClick={() =>
-																		handleDeleteLesson(shot.id, shot.url)
-																	}
-																	className="btn-delete"
-																>
-																	Usuń
-																</button>
-															</div>
-														</div>
-													</div>
-												))}
-											</div>
-										) : (
-											<div className="gallery-placeholder">
-												<p>Brak zapisanych zajęć dla tego ucznia.</p>
-											</div>
-										)}
-									</section>
-								</>
-							) : (
-								<div className="welcome-section">
-									<h1>Panel Korepetytora</h1>
-									<p>
-										Wybierz ucznia z listy po lewej stronie, aby wyświetlić jego
-										profil.
-									</p>
-								</div>
-							)}
-						</section>
+										Usuń
+									</button>
+								)}
+							</div>
+						</div>
 					</div>
-				) : (
-					<>
-						<section className="welcome-section">
-							<h1>Panel Ucznia</h1>
-							<p>
-								Witaj w wirtualnej przestrzeni do nauki matematyki. Twoja
-								tablica jest gotowa.
-							</p>
-							<button
-								onClick={() => navigate(`/room/${currentUser.uid}`)}
-								className="btn-join-room"
-							>
-								Dołącz do aktywnej lekcji
-							</button>
-						</section>
+				))}
+			</div>
+		);
+	};
 
-						<section className="history-section">
-							<h2 className="section-title">Historia zajęć</h2>
-							{screenshots.length > 0 ? (
-								<div className="gallery-grid">
-									{screenshots.map((shot) => (
-										<div key={shot.id} className="gallery-card">
-											<div className="gallery-image-wrapper">
-												<img
-													src={shot.url}
-													alt="Zrzut tablicy z lekcji"
-													loading="lazy"
-												/>
-											</div>
-											<div className="gallery-info">
-												<span>{formatDate(shot.createdAt)}</span>
-												<a
-													href={shot.url}
-													target="_blank"
-													rel="noopener noreferrer"
-													className="btn-download"
-												>
-													Pobierz
-												</a>
-											</div>
-										</div>
-									))}
-								</div>
-							) : (
-								<div className="gallery-placeholder">
-									<p>
-										Po zakończonych zajęciach pojawią się tutaj zrzuty ekranu z
-										zapisem rozwiązanych zadań.
+	return (
+		<>
+			<div className="dashboard-container">
+				<header className="dashboard-header">
+					<div className="user-info">
+						<span className="user-email">{currentUser?.email}</span>
+						<span className="user-role">
+							{isTutor ? "Konto Prowadzącego" : "Konto Ucznia"}
+						</span>
+					</div>
+					<button onClick={handleLogout} className="btn-logout">
+						Wyloguj się
+					</button>
+				</header>
+
+				<main className="dashboard-main">
+					{isTutor ? (
+						<div className="tutor-layout">
+							<aside className="student-list-container">
+								<h2 className="section-title">Twoi Uczniowie</h2>
+								{students.length > 0 ? (
+									<ul className="student-list">
+										{students.map((student) => (
+											<li
+												key={student.uid}
+												className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
+												onClick={() => setSelectedStudent(student)}
+											>
+												{student.email}
+											</li>
+										))}
+									</ul>
+								) : (
+									<p
+										className="gallery-placeholder"
+										style={{ padding: "20px", border: "none" }}
+									>
+										Brak aktywnych uczniów.
 									</p>
-								</div>
-							)}
-						</section>
-					</>
-				)}
-			</main>
-		</div>
+								)}
+							</aside>
+
+							<section className="student-details-container">
+								{selectedStudent ? (
+									<>
+										<div
+											className="welcome-section"
+											style={{ marginBottom: "40px" }}
+										>
+											<h1 style={{ fontSize: "1.8rem", marginBottom: "10px" }}>
+												{selectedStudent.email}
+											</h1>
+											<p style={{ marginBottom: "20px" }}>
+												Przeglądaj historię lekcji lub dołącz do aktywnej
+												tablicy ucznia.
+											</p>
+											<button
+												onClick={() => navigate(`/room/${selectedStudent.uid}`)}
+												className="btn-join-room"
+											>
+												Rozpocznij lekcję z tym uczniem
+											</button>
+										</div>
+
+										<section className="history-section">
+											<h2 className="section-title">Historia zajęć</h2>
+											{renderGallery()}
+										</section>
+									</>
+								) : (
+									<div className="welcome-section">
+										<h1>Panel Korepetytora</h1>
+										<p>
+											Wybierz ucznia z listy po lewej stronie, aby wyświetlić
+											jego profil.
+										</p>
+									</div>
+								)}
+							</section>
+						</div>
+					) : (
+						<>
+							<section className="welcome-section">
+								<h1>Panel Ucznia</h1>
+								<p>
+									Witaj w wirtualnej przestrzeni do nauki matematyki. Twoja
+									tablica jest gotowa.
+								</p>
+								<button
+									onClick={() => navigate(`/room/${currentUser.uid}`)}
+									className="btn-join-room"
+								>
+									Dołącz do aktywnej lekcji
+								</button>
+							</section>
+
+							<section className="history-section">
+								<h2 className="section-title">Historia zajęć</h2>
+								{renderGallery()}
+							</section>
+						</>
+					)}
+				</main>
+			</div>
+
+			{}
+			{previewImage && (
+				<div className="preview-modal-overlay" onClick={closePreview}>
+					<div
+						className="preview-modal-content"
+						onClick={(e) => e.stopPropagation()}
+					>
+						<div className="preview-toolbar">
+							<span className="zoom-level">
+								Skala: {Math.round(zoomScale * 100)}%
+							</span>
+							<button
+								onClick={handleZoomOut}
+								className="btn-zoom"
+								title="Oddal"
+							>
+								➖
+							</button>
+							<button
+								onClick={handleZoomIn}
+								className="btn-zoom"
+								title="Przybliż"
+							>
+								➕
+							</button>
+							<button onClick={closePreview} className="btn-close-modal">
+								Zamknij
+							</button>
+						</div>
+						<div className="preview-image-container">
+							<img
+								src={previewImage}
+								alt="Podgląd pełnoekranowy"
+								style={{ transform: `scale(${zoomScale})` }}
+								className="preview-img"
+							/>
+						</div>
+					</div>
+				</div>
+			)}
+		</>
 	);
 };
 
