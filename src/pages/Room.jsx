@@ -1,6 +1,8 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Stage, Layer, Line } from "react-konva";
+import { ref, onValue, push, remove } from "firebase/database";
+import { database } from "../firebase";
 import "./Room.css";
 
 const Room = () => {
@@ -8,6 +10,7 @@ const Room = () => {
 	const navigate = useNavigate();
 
 	const [lines, setLines] = useState([]);
+	const [currentLine, setCurrentLine] = useState(null);
 	const [isDrawing, setIsDrawing] = useState(false);
 	const [color, setColor] = useState("#00e5ff");
 	const [tool, setTool] = useState("pen");
@@ -24,30 +27,63 @@ const Room = () => {
 		return () => window.removeEventListener("resize", handleResize);
 	}, []);
 
+	useEffect(() => {
+		const linesRef = ref(database, `rooms/${roomId}/lines`);
+		const unsubscribe = onValue(
+			linesRef,
+			(snapshot) => {
+				const data = snapshot.val();
+				if (data) {
+					setLines(Object.values(data));
+				} else {
+					setLines([]);
+				}
+			},
+			(error) => {
+				console.error("Błąd odczytu z Firebase:", error);
+			},
+		);
+
+		return () => unsubscribe();
+	}, [roomId]);
+
 	const handleMouseDown = (e) => {
 		setIsDrawing(true);
 		const pos = e.target.getStage().getPointerPosition();
-		setLines([...lines, { tool, color, points: [pos.x, pos.y] }]);
+		setCurrentLine({ tool, color, points: [pos.x, pos.y] });
 	};
 
 	const handleMouseMove = (e) => {
 		if (!isDrawing) return;
 		const stage = e.target.getStage();
 		const point = stage.getPointerPosition();
-		let lastLine = lines[lines.length - 1];
 
-		lastLine.points = lastLine.points.concat([point.x, point.y]);
-
-		lines.splice(lines.length - 1, 1, lastLine);
-		setLines([...lines]);
+		setCurrentLine((prev) => {
+			if (!prev) return null;
+			return {
+				...prev,
+				points: prev.points.concat([point.x, point.y]),
+			};
+		});
 	};
 
 	const handleMouseUp = () => {
 		setIsDrawing(false);
+		if (currentLine) {
+			const linesRef = ref(database, `rooms/${roomId}/lines`);
+			push(linesRef, currentLine).catch((error) => {
+				console.error("Błąd zapisu w Firebase:", error);
+				alert("Brak uprawnień. Sprawdź reguły bazy danych Firebase.");
+			});
+			setCurrentLine(null);
+		}
 	};
 
 	const handleClear = () => {
-		setLines([]);
+		const linesRef = ref(database, `rooms/${roomId}/lines`);
+		remove(linesRef).catch((error) => {
+			console.error("Błąd usuwania w Firebase:", error);
+		});
 	};
 
 	return (
@@ -111,8 +147,8 @@ const Room = () => {
 						{lines.map((line, i) => (
 							<Line
 								key={i}
-								points={line.points}
-								stroke={line.tool === "eraser" ? "#0b1120" : line.color}
+								points={line.points || []}
+								stroke={line.tool === "eraser" ? "#0d1320" : line.color}
 								strokeWidth={line.tool === "eraser" ? 25 : 4}
 								tension={0.5}
 								lineCap="round"
@@ -122,6 +158,24 @@ const Room = () => {
 								}
 							/>
 						))}
+
+						{currentLine && (
+							<Line
+								points={currentLine.points || []}
+								stroke={
+									currentLine.tool === "eraser" ? "#0d1320" : currentLine.color
+								}
+								strokeWidth={currentLine.tool === "eraser" ? 25 : 4}
+								tension={0.5}
+								lineCap="round"
+								lineJoin="round"
+								globalCompositeOperation={
+									currentLine.tool === "eraser"
+										? "destination-out"
+										: "source-over"
+								}
+							/>
+						)}
 					</Layer>
 				</Stage>
 			</div>

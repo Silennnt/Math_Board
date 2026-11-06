@@ -7,6 +7,8 @@ const firebaseConfig = {
 	apiKey: "AIzaSyCnBqcNhrvVWPMdgdWaCEs0cQp7zvrXWXY",
 	authDomain: "math-board-f3a51.firebaseapp.com",
 	projectId: "math-board-f3a51",
+	databaseURL:
+		"https://math-board-f3a51-default-rtdb.europe-west1.firebasedatabase.app/",
 	storageBucket: "math-board-f3a51.firebasestorage.app",
 	messagingSenderId: "571044598721",
 	appId: "1:571044598721:web:ddc9a838387d32a2f75540",
