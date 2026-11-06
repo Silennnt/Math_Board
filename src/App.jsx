@@ -3,12 +3,7 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
-
-const Room = () => (
-	<div style={{ padding: "2rem", color: "white" }}>
-		Przestrzeń robocza tablicy interaktywnej - W budowie
-	</div>
-);
+import Room from "./pages/Room";
 
 function App() {
 	return (
