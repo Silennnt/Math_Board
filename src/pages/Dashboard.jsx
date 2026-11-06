@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { ref, onValue, set } from "firebase/database";
-import { auth, database } from "../firebase";
+import { ref as dbRef, onValue, set, remove } from "firebase/database";
+import { ref as storageRef, deleteObject } from "firebase/storage";
+import { auth, database, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import "./Dashboard.css";
 
@@ -20,7 +21,7 @@ const Dashboard = () => {
 
 	useEffect(() => {
 		if (currentUser && !isTutor) {
-			const userRef = ref(database, `users/${currentUser.uid}`);
+			const userRef = dbRef(database, `users/${currentUser.uid}`);
 			set(userRef, { email: currentUser.email }).catch((err) =>
 				console.error("Błąd zapisu danych użytkownika:", err),
 			);
@@ -29,7 +30,7 @@ const Dashboard = () => {
 
 	useEffect(() => {
 		if (currentUser && isTutor) {
-			const usersRef = ref(database, "users");
+			const usersRef = dbRef(database, "users");
 			const unsubscribe = onValue(usersRef, (snapshot) => {
 				const data = snapshot.val();
 				if (data) {
@@ -61,8 +62,8 @@ const Dashboard = () => {
 			return;
 		}
 
-		const screenshotsRef = ref(database, `rooms/${targetUid}/screenshots`);
-		const unsubscribe = onValue(screenshotsRef, (snapshot) => {
+		const screenshotsDbRef = dbRef(database, `rooms/${targetUid}/screenshots`);
+		const unsubscribe = onValue(screenshotsDbRef, (snapshot) => {
 			const data = snapshot.val();
 			if (data) {
 				const loadedScreenshots = Object.keys(data)
@@ -87,6 +88,29 @@ const Dashboard = () => {
 			navigate("/login");
 		} catch (error) {
 			console.error("Błąd podczas wylogowywania:", error);
+		}
+	};
+
+	const handleDeleteLesson = async (shotId, shotUrl) => {
+		const confirmDelete = window.confirm(
+			"Czy na pewno chcesz trwale usunąć ten zrzut ekranu z historii?",
+		);
+		if (!confirmDelete) return;
+
+		const targetUid = selectedStudent ? selectedStudent.uid : currentUser.uid;
+
+		try {
+			const shotDbRef = dbRef(
+				database,
+				`rooms/${targetUid}/screenshots/${shotId}`,
+			);
+			await remove(shotDbRef);
+
+			const shotStorageRef = storageRef(storage, shotUrl);
+			await deleteObject(shotStorageRef);
+		} catch (error) {
+			console.error("Błąd podczas usuwania lekcji:", error);
+			alert("Wystąpił błąd podczas usuwania. Sprawdź konsolę.");
 		}
 	};
 
@@ -179,14 +203,24 @@ const Dashboard = () => {
 														</div>
 														<div className="gallery-info">
 															<span>{formatDate(shot.createdAt)}</span>
-															<a
-																href={shot.url}
-																target="_blank"
-																rel="noopener noreferrer"
-																className="btn-download"
-															>
-																Pobierz
-															</a>
+															<div className="gallery-actions">
+																<a
+																	href={shot.url}
+																	target="_blank"
+																	rel="noopener noreferrer"
+																	className="btn-download"
+																>
+																	Pobierz
+																</a>
+																<button
+																	onClick={() =>
+																		handleDeleteLesson(shot.id, shot.url)
+																	}
+																	className="btn-delete"
+																>
+																	Usuń
+																</button>
+															</div>
 														</div>
 													</div>
 												))}
