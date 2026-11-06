@@ -223,3 +223,65 @@
 	border-color: var(--cyan);
 	box-shadow: 0 0 15px rgba(0, 229, 255, 0.15);
 }
+
+.section-title {
+	font-size: 1.5rem;
+	margin-bottom: 20px;
+	color: var(--cyan);
+}
+
+.tutor-layout {
+	display: grid;
+	grid-template-columns: 320px 1fr;
+	gap: 40px;
+	align-items: start;
+}
+
+.student-list-container {
+	background: var(--glass-bg);
+	backdrop-filter: blur(10px);
+	-webkit-backdrop-filter: blur(10px);
+	border: 1px solid var(--glass-brd);
+	border-radius: var(--r2);
+	padding: 25px;
+}
+
+.student-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.student-item {
+	padding: 15px;
+	background: rgba(0, 0, 0, 0.2);
+	border: 1px solid rgba(255, 255, 255, 0.05);
+	border-radius: var(--r);
+	cursor: pointer;
+	transition: all 0.2s ease;
+	font-family: var(--font-mono, monospace);
+	font-size: 0.9rem;
+	color: var(--muted);
+}
+
+.student-item:hover {
+	background: rgba(0, 229, 255, 0.05);
+	border-color: rgba(0, 229, 255, 0.3);
+	color: var(--cyan);
+}
+
+.student-item.active {
+	background: rgba(0, 229, 255, 0.15);
+	border-color: var(--cyan);
+	color: var(--cyan);
+	font-weight: bold;
+}
+
+@media (max-width: 900px) {
+	.tutor-layout {
+		grid-template-columns: 1fr;
+	}
+}
