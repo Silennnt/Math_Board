@@ -23,7 +23,7 @@ const formulas = [
 
 const FloatingMath = () => {
 	const items = useMemo(() => {
-		return Array.from({ length: 40 }).map((_, i) => {
+		return Array.from({ length: 20 }).map((_, i) => {
 			const formula = formulas[Math.floor(Math.random() * formulas.length)];
 
 			const startX = Math.random() * 100;

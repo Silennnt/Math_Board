@@ -1,8 +1,9 @@
-import React from "react";
+import React, { memo } from "react";
 import FloatingMath from "./FloatingMath";
 import "./MathBackground.css";
 
-const MathBackground = () => {
+// Owinięcie komponentu w memo() zapobiega jego przeładowywaniu
+const MathBackground = memo(() => {
 	return (
 		<div className="math-background-fixed-wrapper">
 			<div className="grid-bg"></div>
@@ -50,6 +51,6 @@ const MathBackground = () => {
 			<FloatingMath />
 		</div>
 	);
-};
+});
 
 export default MathBackground;

@@ -1,10 +1,13 @@
 .math-background-fixed-wrapper {
 	position: fixed;
 	inset: 0;
-	z-index: 0;
+	z-index: -1;
 	pointer-events: none;
-	background-color: #0d1320; /* Dokładny kolor tła z poprzedniego projektu */
+	background-color: #0d1320;
 	overflow: hidden;
+	/* Wymuszenie własnej warstwy w GPU i izolacja renderowania */
+	transform: translateZ(0);
+	contain: strict;
 }
 
 .grid-bg {
@@ -115,7 +118,6 @@
 		transform: rotateX(20deg) rotateY(360deg);
 	}
 }
-
 .cube-face {
 	position: absolute;
 	width: 120px;
@@ -131,7 +133,8 @@
 	font-family: var(--font-mono, monospace);
 	font-size: 1.8rem;
 	color: rgba(0, 229, 255, 0.4);
-	backdrop-filter: blur(4px);
+	/* Usunięto backdrop-filter, dodano ukrywanie tylnych ścian */
+	backface-visibility: hidden;
 }
 
 .cf-front {
@@ -197,7 +200,6 @@
 		transform: rotateX(35deg) rotateY(360deg);
 	}
 }
-
 .tri-face {
 	position: absolute;
 	width: 90px;
@@ -213,6 +215,8 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
+	/* Dodano ukrywanie tylnych ścian */
+	backface-visibility: hidden;
 }
 
 .tf1 {
