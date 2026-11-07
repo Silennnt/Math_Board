@@ -2,50 +2,93 @@
 	width: 100vw;
 	height: 100vh;
 	overflow: hidden;
-	background-color: var(--bg);
 	position: relative;
-	background-image: radial-gradient(
-		rgba(255, 255, 255, 0.05) 1px,
-		transparent 1px
-	);
-	background-size: 25px 25px;
+	transition: background-color 0.3s ease;
 }
 
-.room-toolbar {
+.left-toolbar {
 	position: absolute;
-	top: 20px;
-	left: 50%;
-	transform: translateX(-50%);
+	left: 20px;
+	top: 50%;
+	transform: translateY(-50%);
 	z-index: 10;
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 20px;
+	width: 95px;
 	background: var(--glass-bg);
 	backdrop-filter: blur(15px);
 	-webkit-backdrop-filter: blur(15px);
 	border: 1px solid var(--glass-brd);
-	padding: 10px 20px;
+	padding: 10px 0;
 	border-radius: var(--r2);
-	box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4);
+	max-height: 95vh;
+	overflow-y: auto;
+	transition: all 0.3s ease;
+}
+
+.left-toolbar::-webkit-scrollbar {
+	display: none;
+}
+.left-toolbar {
+	-ms-overflow-style: none;
+	scrollbar-width: none;
+}
+
+/* Właściwości dla jasnego motywu panelu narzędzi */
+.left-toolbar.theme-light {
+	background: rgba(255, 255, 255, 0.85);
+	border-color: rgba(0, 0, 0, 0.15);
+	box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.left-toolbar.theme-light .toolbar-section {
+	border-bottom-color: rgba(0, 0, 0, 0.1);
+}
+
+.left-toolbar.theme-light .tool-btn,
+.left-toolbar.theme-light .btn-leave,
+.left-toolbar.theme-light .tool-label {
+	color: #334155;
+}
+
+.left-toolbar.theme-light .tool-btn:hover {
+	background: rgba(0, 0, 0, 0.05);
+}
+
+.left-toolbar.theme-light .tool-btn.active {
+	background: rgba(0, 229, 255, 0.15);
+	border-color: rgba(0, 229, 255, 0.5);
+	color: #0284c7;
+}
+
+.left-toolbar.theme-light .bg-toggle.active {
+	background: rgba(168, 85, 247, 0.15);
+	border-color: rgba(168, 85, 247, 0.5);
+	color: #9333ea;
+}
+
+/* Wygaszenie nieaktywnych sekcji (blokuje skakanie layoutu) */
+.disabled-ui {
+	opacity: 0.25;
+	pointer-events: none;
+	filter: grayscale(100%);
 }
 
 .toolbar-section {
 	display: flex;
+	flex-direction: column;
 	align-items: center;
-	gap: 10px;
-	padding: 0 10px;
-	border-right: 1px solid rgba(255, 255, 255, 0.1);
+	gap: 12px;
+	padding: 15px 0;
+	width: 100%;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	transition: opacity 0.3s ease;
 }
 
-.toolbar-section:last-child {
-	border-right: none;
-}
-
-.room-id {
-	font-family: var(--font-mono, monospace);
-	font-size: 0.8rem;
-	color: var(--muted);
-	letter-spacing: 1px;
+.toolbar-section.no-border {
+	border-bottom: none;
 }
 
 .btn-leave {
@@ -53,41 +96,59 @@
 	color: var(--muted);
 	border: none;
 	cursor: pointer;
-	font-size: 0.9rem;
+	font-size: 0.8rem;
+	font-weight: 600;
 	transition: color 0.3s;
+	padding: 5px;
 }
 
 .btn-leave:hover {
-	color: var(--text);
-}
-
-.tool-btn {
-	background: rgba(255, 255, 255, 0.05);
-	border: 1px solid transparent;
-	color: var(--text);
-	padding: 8px 16px;
-	border-radius: var(--r);
-	cursor: pointer;
-	transition: all 0.3s ease;
-}
-
-.tool-btn:hover {
-	background: rgba(255, 255, 255, 0.1);
-}
-
-.tool-btn.active {
-	background: rgba(0, 229, 255, 0.15);
-	border-color: var(--cyan);
 	color: var(--cyan);
 }
 
-.tool-btn.danger {
-	color: #ef4444;
+.tool-btn {
+	background: transparent;
+	border: 1px solid transparent;
+	color: var(--text);
+	padding: 8px 0;
+	width: 85%;
+	border-radius: var(--r);
+	cursor: pointer;
+	transition: all 0.2s ease;
+	font-size: 0.75rem;
+	font-weight: 500;
+	text-align: center;
 }
 
-.tool-btn.danger:hover {
-	background: rgba(239, 68, 68, 0.15);
-	border-color: #ef4444;
+.tool-btn:hover {
+	background: rgba(255, 255, 255, 0.05);
+}
+
+.tool-btn.active {
+	background: rgba(0, 229, 255, 0.1);
+	border-color: rgba(0, 229, 255, 0.3);
+	color: var(--cyan);
+}
+
+.bg-options {
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+	width: 100%;
+	align-items: center;
+}
+
+.bg-toggle.active {
+	background: rgba(168, 85, 247, 0.1);
+	border-color: rgba(168, 85, 247, 0.3);
+	color: #a855f7;
+}
+
+.color-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 10px;
+	padding: 0 10px;
 }
 
 .color-swatch {
@@ -102,13 +163,60 @@
 }
 
 .color-swatch:hover {
-	transform: scale(1.1);
+	transform: scale(1.15);
 }
 
 .color-swatch.active {
-	border-color: var(--bg);
-	box-shadow: 0 0 0 2px var(--text);
-	transform: scale(1.1);
+	border-color: #888;
+	box-shadow: 0 0 0 2px var(--cyan);
+	transform: scale(1.15);
+}
+
+.thickness-picker {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 6px;
+	width: 100%;
+	margin-top: 5px;
+}
+
+.tool-label {
+	font-size: 0.65rem;
+	color: var(--muted);
+	text-transform: uppercase;
+	letter-spacing: 0.5px;
+}
+
+.vertical-slider {
+	width: 70%;
+	cursor: pointer;
+	accent-color: var(--cyan);
+}
+
+.btn-save {
+	background: linear-gradient(135deg, var(--cyan), var(--violet));
+	color: #fff;
+	border: none;
+	padding: 10px 0;
+	width: 85%;
+	border-radius: var(--r);
+	cursor: pointer;
+	font-weight: 600;
+	font-size: 0.8rem;
+	transition:
+		opacity 0.3s ease,
+		transform 0.2s;
+}
+
+.btn-save:hover:not(:disabled) {
+	opacity: 0.9;
+	transform: translateY(-2px);
+}
+
+.btn-save:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 
 .canvas-wrapper {
@@ -116,22 +224,60 @@
 	height: 100%;
 	cursor: crosshair;
 }
-.btn-save {
-	background: linear-gradient(90deg, var(--cyan), var(--violet));
-	color: #fff;
-	border: none;
-	padding: 8px 16px;
-	border-radius: var(--r);
-	cursor: pointer;
-	font-weight: 600;
-	transition: opacity 0.3s ease;
+
+.canvas-wrapper.panning {
+	cursor: grabbing !important;
 }
 
-.btn-save:hover {
-	opacity: 0.9;
-}
+@media (max-width: 850px) {
+	.left-toolbar {
+		left: 50%;
+		top: auto;
+		bottom: 20px;
+		transform: translateX(-50%);
+		flex-direction: row;
+		width: 95%;
+		max-width: 100%;
+		height: auto;
+		padding: 10px 15px;
+		overflow-x: auto;
+		align-items: stretch;
+	}
 
-.btn-save:disabled {
-	opacity: 0.5;
-	cursor: not-allowed;
+	.toolbar-section {
+		flex-direction: row;
+		width: auto;
+		border-bottom: none;
+		border-right: 1px solid rgba(255, 255, 255, 0.08);
+		padding: 0 15px;
+		gap: 10px;
+	}
+
+	.left-toolbar.theme-light .toolbar-section {
+		border-right-color: rgba(0, 0, 0, 0.1);
+		border-bottom-color: transparent;
+	}
+
+	.toolbar-section.no-border {
+		border-right: none;
+	}
+
+	.tool-btn,
+	.btn-save {
+		width: max-content;
+		padding: 8px 16px;
+		white-space: nowrap;
+	}
+
+	.color-grid {
+		grid-template-columns: repeat(6, 1fr);
+	}
+
+	.thickness-picker {
+		flex-direction: row;
+	}
+
+	.bg-options {
+		flex-direction: row;
+	}
 }
