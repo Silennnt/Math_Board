@@ -22,7 +22,9 @@ const Room = () => {
 	const { roomId } = useParams();
 	const navigate = useNavigate();
 	const { currentUser } = useAuth();
+
 	const stageRef = useRef(null);
+	const bgRectRef = useRef(null); // Ref do kontrolowania tła przy eksporcie
 
 	const [lines, setLines] = useState([]);
 	const [currentLine, setCurrentLine] = useState(null);
@@ -30,14 +32,15 @@ const Room = () => {
 	const [isPanning, setIsPanning] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
 
-	// Stan kursorów innych użytkowników
 	const [cursors, setCursors] = useState({});
 	const lastCursorUpdate = useRef(0);
+
+	// Stan śledzący datę rozpoczęcia obecnego cyklu tablicy
+	const [sessionCreatedAt, setSessionCreatedAt] = useState(null);
 
 	const [tool, setTool] = useState("pen");
 	const [color, setColor] = useState("#00e5ff");
 	const [thickness, setThickness] = useState(4);
-
 	const [bgTheme, setBgTheme] = useState("dark");
 	const [showGrid, setShowGrid] = useState(true);
 
@@ -90,33 +93,30 @@ const Room = () => {
 		return () => window.removeEventListener("resize", handleResize);
 	}, []);
 
-	// Zarządzanie stanem linii i kursorów z Firebase
 	useEffect(() => {
 		if (!currentUser) return;
 
-		// Nasłuchiwanie linii
 		const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
 		const unsubscribeLines = onValue(linesDbRef, (snapshot) => {
 			const data = snapshot.val();
 			if (data) {
-				const loadedLines = Object.keys(data).map((key) => ({
-					id: key,
-					...data[key],
-				}));
-				setLines(loadedLines);
+				setLines(Object.keys(data).map((key) => ({ id: key, ...data[key] })));
 			} else {
 				setLines([]);
 			}
 		});
 
-		// Nasłuchiwanie kursorów
 		const cursorsDbRef = dbRef(database, `rooms/${roomId}/cursors`);
 		const unsubscribeCursors = onValue(cursorsDbRef, (snapshot) => {
-			const data = snapshot.val();
-			setCursors(data || {});
+			setCursors(snapshot.val() || {});
 		});
 
-		// Ustawienie mechanizmu usuwania kursora przy zerwaniu połączenia (onDisconnect)
+		// Nasłuchiwanie informacji o dacie startu sesji
+		const sessionRef = dbRef(database, `rooms/${roomId}/sessionInfo/createdAt`);
+		const unsubscribeSession = onValue(sessionRef, (snapshot) => {
+			setSessionCreatedAt(snapshot.val());
+		});
+
 		const myCursorRef = dbRef(
 			database,
 			`rooms/${roomId}/cursors/${currentUser.uid}`,
@@ -126,7 +126,7 @@ const Room = () => {
 		return () => {
 			unsubscribeLines();
 			unsubscribeCursors();
-			// Usunięcie kursora przy poprawnym zamknięciu komponentu
+			unsubscribeSession();
 			remove(myCursorRef).catch(console.error);
 		};
 	}, [roomId, currentUser]);
@@ -170,6 +170,13 @@ const Room = () => {
 
 		if (tool === "eraser-object") return;
 
+		// Jeżeli to pierwsza akcja w nowym cyklu, ustawiamy datę utworzenia
+		if (!sessionCreatedAt) {
+			const now = new Date().toISOString();
+			set(dbRef(database, `rooms/${roomId}/sessionInfo/createdAt`), now);
+			setSessionCreatedAt(now); // Optymistyczna aktualizacja UI
+		}
+
 		setIsDrawing(true);
 		const pos = getLogicalPosition(e.target.getStage());
 		setCurrentLine({ tool, color, thickness, points: [pos.x, pos.y] });
@@ -179,7 +186,6 @@ const Room = () => {
 		const stage = e.target.getStage();
 		const logicalPos = getLogicalPosition(stage);
 
-		// Aktualizacja pozycji kursora w Firebase z zastosowaniem ograniczania (ok. 20 aktualizacji na sekundę)
 		const now = Date.now();
 		if (now - lastCursorUpdate.current > 50 && currentUser) {
 			const myCursorRef = dbRef(
@@ -241,33 +247,119 @@ const Room = () => {
 		remove(lineRef).catch(console.error);
 	};
 
-	const handleSaveAndExit = async () => {
+	const handleClearBoard = () => {
+		if (
+			window.confirm(
+				"UWAGA: To trwale usunie wszystkie rysunki z obecnego cyklu (dla Ciebie i ucznia). Upewnij się, że wcześniej wykonałeś zrzut. Kontynuować?",
+			)
+		) {
+			remove(dbRef(database, `rooms/${roomId}/lines`));
+			remove(dbRef(database, `rooms/${roomId}/sessionInfo`));
+		}
+	};
+
+	const handleSaveScreenshot = async () => {
 		if (!stageRef.current) return;
 		setIsSaving(true);
+
 		try {
-			const dataUrl = stageRef.current.toDataURL({ pixelRatio: 2 });
+			// 1. Algorytm Inteligentnego Kadrowania (Smart Bounding Box)
+			let minX = Infinity,
+				minY = Infinity,
+				maxX = -Infinity,
+				maxY = -Infinity;
+
+			lines.forEach((line) => {
+				for (let i = 0; i < line.points.length; i += 2) {
+					const x = line.points[i];
+					const y = line.points[i + 1];
+					if (x < minX) minX = x;
+					if (x > maxX) maxX = x;
+					if (y < minY) minY = y;
+					if (y > maxY) maxY = y;
+				}
+			});
+
+			// Zabezpieczenie przed pustą tablicą
+			if (minX === Infinity) {
+				minX = 0;
+				minY = 0;
+				maxX = window.innerWidth;
+				maxY = window.innerHeight;
+			}
+
+			// Estetyczny margines wokół notatek
+			const padding = 70;
+			minX -= padding;
+			minY -= padding;
+			maxX += padding;
+			maxY += padding;
+			const bWidth = maxX - minX;
+			const bHeight = maxY - minY;
+
+			// 2. Wymuszenie synchronicznych przekształceń w Konva do wygenerowania zrzutu całego obszaru
+			const stage = stageRef.current;
+			const bgRect = bgRectRef.current;
+
+			const oldScaleX = stage.scaleX();
+			const oldScaleY = stage.scaleY();
+			const oldX = stage.x();
+			const oldY = stage.y();
+			const oldBgAttrs = { ...bgRect.attrs };
+
+			stage.scale({ x: 1, y: 1 });
+			stage.position({ x: 0, y: 0 });
+			bgRect.setAttrs({
+				x: minX,
+				y: minY,
+				width: bWidth,
+				height: bHeight,
+				fillPatternOffsetX: minX,
+				fillPatternOffsetY: minY,
+			});
+
+			stage.draw(); // Wymuszenie synchronicznego wyrenderowania
+
+			// 3. Pobranie zrzutu obszaru (niezależnie od tego, co fizycznie mieści się na ekranie)
+			const dataUrl = stage.toDataURL({
+				x: minX,
+				y: minY,
+				width: bWidth,
+				height: bHeight,
+				pixelRatio: 2,
+			});
+
+			// 4. Błyskawiczne przywrócenie widoku dla użytkownika
+			stage.scale({ x: oldScaleX, y: oldScaleY });
+			stage.position({ x: oldX, y: oldY });
+			bgRect.setAttrs(oldBgAttrs);
+			stage.draw();
+
+			// 5. Zapis w chmurze
 			const timestamp = Date.now();
 			const imageRef = storageRef(
 				storage,
 				`rooms/${roomId}/screenshots/board_${timestamp}.png`,
 			);
-
 			await uploadString(imageRef, dataUrl, "data_url");
 			const downloadUrl = await getDownloadURL(imageRef);
 
+			// 6. Zapis w bazie pod oryginalną datą UTWORZENIA cyklu (bądź obecną, jeśli z jakiegoś powodu jej brak)
 			const screenshotsDbRef = dbRef(database, `rooms/${roomId}/screenshots`);
+			const lessonDate = sessionCreatedAt || new Date().toISOString();
+
 			await push(screenshotsDbRef, {
 				url: downloadUrl,
-				createdAt: new Date().toISOString(),
+				createdAt: lessonDate,
 			});
 
-			const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
-			await remove(linesDbRef);
-
-			navigate("/dashboard");
+			alert(
+				"Pomyślnie wygenerowano i zapisano pełny zrzut tablicy w historii ucznia.",
+			);
+			// Zauważ brak: remove(linesDbRef) i navigate() - uczeń i Ty możecie swobodnie rysować dalej!
 		} catch (error) {
-			console.error(error);
-			alert("Wystąpił błąd podczas zapisywania tablicy.");
+			console.error("Błąd zapisu zrzutu:", error);
+			alert("Wystąpił błąd podczas generowania zrzutu ekranu.");
 		} finally {
 			setIsSaving(false);
 		}
@@ -284,7 +376,7 @@ const Room = () => {
 					<button
 						className="btn-leave"
 						onClick={() => navigate("/dashboard")}
-						title="Wróć do panelu"
+						title="Wróć do panelu (bez usuwania tablicy)"
 					>
 						⏴ Wróć
 					</button>
@@ -372,10 +464,18 @@ const Room = () => {
 				<div className="toolbar-section no-border">
 					<button
 						className="btn-save"
-						onClick={handleSaveAndExit}
+						onClick={handleSaveScreenshot}
 						disabled={isSaving}
+						title="Generuje zrzut ekranu całego materiału, ale nie usuwa tablicy"
 					>
-						{isSaving ? "⏳" : "Zapisz"}
+						{isSaving ? "⏳" : "Zrób Zrzut"}
+					</button>
+					<button
+						className="btn-clear"
+						onClick={handleClearBoard}
+						title="Usuwa bieżący materiał, robiąc miejsce na nowy tydzień"
+					>
+						Wyczyść
 					</button>
 				</div>
 			</aside>
@@ -384,7 +484,6 @@ const Room = () => {
 				<div className="remote-cursors-overlay">
 					{Object.entries(cursors).map(([uid, cursorData]) => {
 						if (uid === currentUser?.uid) return null;
-
 						const screenX = cursorData.x * stageConfig.scale + stageConfig.x;
 						const screenY = cursorData.y * stageConfig.scale + stageConfig.y;
 
@@ -408,7 +507,6 @@ const Room = () => {
 										strokeLinejoin="round"
 									/>
 								</svg>
-
 								<div className={`remote-cursor-label label-theme-${bgTheme}`}>
 									{cursorData.email}
 								</div>
@@ -435,7 +533,9 @@ const Room = () => {
 					onTouchEnd={handleMouseUp}
 				>
 					<Layer>
+						{/* Tło wyizolowane refem, z którym komunikuje się nowa funkcja kadrująca */}
 						<Rect
+							ref={bgRectRef}
 							x={-stageConfig.x / stageConfig.scale}
 							y={-stageConfig.y / stageConfig.scale}
 							width={dimensions.width / stageConfig.scale}
