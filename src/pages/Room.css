@@ -281,7 +281,6 @@
 		flex-direction: row;
 	}
 }
-/* Style dla warstwy śledzenia kursorów */
 .remote-cursors-overlay {
 	position: absolute;
 	top: 0;
@@ -302,30 +301,40 @@
 	align-items: flex-start;
 	pointer-events: none;
 	will-change: transform;
-	color: var(--violet); /* Domyślny kolor kursora w ciemnym motywie */
-	transition: transform 0.05s linear; /* Wygładzenie ruchu */
-}
-
-.remote-cursor.theme-light {
-	color: #3b82f6; /* Domyślny kolor kursora w jasnym motywie */
+	transition: transform 0.12s cubic-bezier(0.33, 1, 0.68, 1);
 }
 
 .remote-cursor svg {
-	width: 20px;
-	height: 20px;
-	filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+	filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+	transform-origin: top left;
 }
 
 .remote-cursor-label {
-	background: currentColor;
-	color: #fff;
-	padding: 4px 8px;
-	border-radius: 0 8px 8px 8px;
-	font-size: 0.7rem;
+	padding: 6px 12px;
+	border-radius: 12px;
+	font-size: 0.75rem;
 	font-weight: 600;
-	font-family: var(--font-sans, sans-serif);
-	margin-top: -2px;
-	margin-left: 10px;
-	box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+	font-family: var(--font-sans, system-ui, sans-serif);
+	letter-spacing: 0.3px;
+	margin-top: 2px;
+	margin-left: 14px;
+	backdrop-filter: blur(8px);
+	-webkit-backdrop-filter: blur(8px);
 	white-space: nowrap;
+}
+
+
+.label-theme-dark {
+	background: rgba(255, 255, 255, 0.95);
+	color: #0f172a;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+	border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+
+.label-theme-light {
+	background: rgba(15, 23, 42, 0.95);
+	color: #ffffff;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+	border: 1px solid rgba(0, 0, 0, 0.05);
 }

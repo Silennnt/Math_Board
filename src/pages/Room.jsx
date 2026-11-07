@@ -381,32 +381,37 @@ const Room = () => {
 			</aside>
 
 			<div className={`canvas-wrapper ${isPanning ? "panning" : ""}`}>
-				{/* Renderowanie kursorów innych użytkowników z wykorzystaniem warstwy HTML */}
 				<div className="remote-cursors-overlay">
 					{Object.entries(cursors).map(([uid, cursorData]) => {
 						if (uid === currentUser?.uid) return null;
 
-						// Konwersja współrzędnych logicznych na ekranowe względem aktualnego przybliżenia i przesunięcia
 						const screenX = cursorData.x * stageConfig.scale + stageConfig.x;
 						const screenY = cursorData.y * stageConfig.scale + stageConfig.y;
 
 						return (
 							<div
 								key={uid}
-								className={`remote-cursor theme-${bgTheme}`}
+								className="remote-cursor"
 								style={{ transform: `translate(${screenX}px, ${screenY}px)` }}
 							>
 								<svg
-									width="24"
-									height="24"
+									width="26"
+									height="26"
 									viewBox="0 0 24 24"
-									fill="currentColor"
-									stroke="white"
-									strokeWidth="1.5"
+									fill={bgTheme === "dark" ? "#00e5ff" : "#3b82f6"}
+									xmlns="http://www.w3.org/2000/svg"
 								>
-									<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+									<path
+										d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L5.5 3.21z"
+										stroke="white"
+										strokeWidth="1.5"
+										strokeLinejoin="round"
+									/>
 								</svg>
-								<span className="remote-cursor-label">{cursorData.email}</span>
+
+								<div className={`remote-cursor-label label-theme-${bgTheme}`}>
+									{cursorData.email}
+								</div>
 							</div>
 						);
 					})}
