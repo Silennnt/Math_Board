@@ -281,3 +281,51 @@
 		flex-direction: row;
 	}
 }
+/* Style dla warstwy śledzenia kursorów */
+.remote-cursors-overlay {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	pointer-events: none;
+	z-index: 5;
+	overflow: hidden;
+}
+
+.remote-cursor {
+	position: absolute;
+	top: 0;
+	left: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	pointer-events: none;
+	will-change: transform;
+	color: var(--violet); /* Domyślny kolor kursora w ciemnym motywie */
+	transition: transform 0.05s linear; /* Wygładzenie ruchu */
+}
+
+.remote-cursor.theme-light {
+	color: #3b82f6; /* Domyślny kolor kursora w jasnym motywie */
+}
+
+.remote-cursor svg {
+	width: 20px;
+	height: 20px;
+	filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.remote-cursor-label {
+	background: currentColor;
+	color: #fff;
+	padding: 4px 8px;
+	border-radius: 0 8px 8px 8px;
+	font-size: 0.7rem;
+	font-weight: 600;
+	font-family: var(--font-sans, sans-serif);
+	margin-top: -2px;
+	margin-left: 10px;
+	box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+	white-space: nowrap;
+}

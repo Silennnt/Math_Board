@@ -1,18 +1,27 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Stage, Layer, Line, Rect } from "react-konva";
-import { ref as dbRef, onValue, push, remove } from "firebase/database";
+import {
+	ref as dbRef,
+	onValue,
+	push,
+	remove,
+	set,
+	onDisconnect,
+} from "firebase/database";
 import {
 	ref as storageRef,
 	uploadString,
 	getDownloadURL,
 } from "firebase/storage";
 import { database, storage } from "../firebase";
+import { useAuth } from "../context/AuthContext";
 import "./Room.css";
 
 const Room = () => {
 	const { roomId } = useParams();
 	const navigate = useNavigate();
+	const { currentUser } = useAuth();
 	const stageRef = useRef(null);
 
 	const [lines, setLines] = useState([]);
@@ -20,6 +29,10 @@ const Room = () => {
 	const [isDrawing, setIsDrawing] = useState(false);
 	const [isPanning, setIsPanning] = useState(false);
 	const [isSaving, setIsSaving] = useState(false);
+
+	// Stan kursorów innych użytkowników
+	const [cursors, setCursors] = useState({});
+	const lastCursorUpdate = useRef(0);
 
 	const [tool, setTool] = useState("pen");
 	const [color, setColor] = useState("#00e5ff");
@@ -77,9 +90,13 @@ const Room = () => {
 		return () => window.removeEventListener("resize", handleResize);
 	}, []);
 
+	// Zarządzanie stanem linii i kursorów z Firebase
 	useEffect(() => {
+		if (!currentUser) return;
+
+		// Nasłuchiwanie linii
 		const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
-		const unsubscribe = onValue(linesDbRef, (snapshot) => {
+		const unsubscribeLines = onValue(linesDbRef, (snapshot) => {
 			const data = snapshot.val();
 			if (data) {
 				const loadedLines = Object.keys(data).map((key) => ({
@@ -92,8 +109,27 @@ const Room = () => {
 			}
 		});
 
-		return () => unsubscribe();
-	}, [roomId]);
+		// Nasłuchiwanie kursorów
+		const cursorsDbRef = dbRef(database, `rooms/${roomId}/cursors`);
+		const unsubscribeCursors = onValue(cursorsDbRef, (snapshot) => {
+			const data = snapshot.val();
+			setCursors(data || {});
+		});
+
+		// Ustawienie mechanizmu usuwania kursora przy zerwaniu połączenia (onDisconnect)
+		const myCursorRef = dbRef(
+			database,
+			`rooms/${roomId}/cursors/${currentUser.uid}`,
+		);
+		onDisconnect(myCursorRef).remove();
+
+		return () => {
+			unsubscribeLines();
+			unsubscribeCursors();
+			// Usunięcie kursora przy poprawnym zamknięciu komponentu
+			remove(myCursorRef).catch(console.error);
+		};
+	}, [roomId, currentUser]);
 
 	const getLogicalPosition = (stage) => {
 		const pos = stage.getPointerPosition();
@@ -140,6 +176,24 @@ const Room = () => {
 	};
 
 	const handleMouseMove = (e) => {
+		const stage = e.target.getStage();
+		const logicalPos = getLogicalPosition(stage);
+
+		// Aktualizacja pozycji kursora w Firebase z zastosowaniem ograniczania (ok. 20 aktualizacji na sekundę)
+		const now = Date.now();
+		if (now - lastCursorUpdate.current > 50 && currentUser) {
+			const myCursorRef = dbRef(
+				database,
+				`rooms/${roomId}/cursors/${currentUser.uid}`,
+			);
+			set(myCursorRef, {
+				x: logicalPos.x,
+				y: logicalPos.y,
+				email: currentUser.email,
+			}).catch(console.error);
+			lastCursorUpdate.current = now;
+		}
+
 		if (isPanning) {
 			setStageConfig((prev) => ({
 				...prev,
@@ -150,11 +204,10 @@ const Room = () => {
 		}
 
 		if (!isDrawing || tool === "eraser-object" || !currentLine) return;
-		const pos = getLogicalPosition(e.target.getStage());
 
 		setCurrentLine((prev) => ({
 			...prev,
-			points: prev.points.concat([pos.x, pos.y]),
+			points: prev.points.concat([logicalPos.x, logicalPos.y]),
 		}));
 	};
 
@@ -168,6 +221,16 @@ const Room = () => {
 			const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
 			push(linesDbRef, currentLine).catch(console.error);
 			setCurrentLine(null);
+		}
+	};
+
+	const handleMouseLeave = () => {
+		if (currentUser) {
+			const myCursorRef = dbRef(
+				database,
+				`rooms/${roomId}/cursors/${currentUser.uid}`,
+			);
+			remove(myCursorRef).catch(console.error);
 		}
 	};
 
@@ -216,7 +279,6 @@ const Room = () => {
 			onContextMenu={handleContextMenu}
 			style={{ backgroundColor: bgTheme === "dark" ? "#0d1320" : "#f8fafc" }}
 		>
-			{}
 			<aside className={`room-toolbar left-toolbar theme-${bgTheme}`}>
 				<div className="toolbar-section">
 					<button
@@ -251,7 +313,6 @@ const Room = () => {
 					</button>
 				</div>
 
-				{}
 				<div
 					className={`toolbar-section ${tool !== "pen" ? "disabled-ui" : ""}`}
 				>
@@ -268,7 +329,6 @@ const Room = () => {
 					</div>
 				</div>
 
-				{}
 				<div
 					className={`toolbar-section ${tool === "eraser-object" ? "disabled-ui" : ""}`}
 				>
@@ -321,6 +381,37 @@ const Room = () => {
 			</aside>
 
 			<div className={`canvas-wrapper ${isPanning ? "panning" : ""}`}>
+				{/* Renderowanie kursorów innych użytkowników z wykorzystaniem warstwy HTML */}
+				<div className="remote-cursors-overlay">
+					{Object.entries(cursors).map(([uid, cursorData]) => {
+						if (uid === currentUser?.uid) return null;
+
+						// Konwersja współrzędnych logicznych na ekranowe względem aktualnego przybliżenia i przesunięcia
+						const screenX = cursorData.x * stageConfig.scale + stageConfig.x;
+						const screenY = cursorData.y * stageConfig.scale + stageConfig.y;
+
+						return (
+							<div
+								key={uid}
+								className={`remote-cursor theme-${bgTheme}`}
+								style={{ transform: `translate(${screenX}px, ${screenY}px)` }}
+							>
+								<svg
+									width="24"
+									height="24"
+									viewBox="0 0 24 24"
+									fill="currentColor"
+									stroke="white"
+									strokeWidth="1.5"
+								>
+									<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+								</svg>
+								<span className="remote-cursor-label">{cursorData.email}</span>
+							</div>
+						);
+					})}
+				</div>
+
 				<Stage
 					ref={stageRef}
 					width={dimensions.width}
@@ -333,12 +424,12 @@ const Room = () => {
 					onMouseDown={handleMouseDown}
 					onMousemove={handleMouseMove}
 					onMouseup={handleMouseUp}
+					onMouseLeave={handleMouseLeave}
 					onTouchStart={handleMouseDown}
 					onTouchMove={handleMouseMove}
 					onTouchEnd={handleMouseUp}
 				>
 					<Layer>
-						{}
 						<Rect
 							x={-stageConfig.x / stageConfig.scale}
 							y={-stageConfig.y / stageConfig.scale}
