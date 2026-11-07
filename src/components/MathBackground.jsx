@@ -2,7 +2,6 @@ import React, { memo } from "react";
 import FloatingMath from "./FloatingMath";
 import "./MathBackground.css";
 
-// Owinięcie komponentu w memo() zapobiega jego przeładowywaniu
 const MathBackground = memo(() => {
 	return (
 		<div className="math-background-fixed-wrapper">

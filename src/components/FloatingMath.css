@@ -17,7 +17,6 @@
 	user-select: none;
 	white-space: nowrap;
 	will-change: transform, opacity;
-	/* Wymusza przerzucenie obliczeń na kartę graficzną (GPU) */
 	transform: translateZ(0);
 	animation: float-random var(--dur) linear var(--delay) infinite;
 }

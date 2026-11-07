@@ -147,7 +147,7 @@ const Dashboard = () => {
 				"Wystąpił problem z pobieraniem w tle (CORS), otwieram w nowej karcie:",
 				error,
 			);
-			window.open(url, "_blank"); // Zabezpieczenie na wypadek blokady CORS
+			window.open(url, "_blank"); 
 		}
 	};
 
