@@ -1,3 +1,38 @@
+/* Zarezerwowanie miejsca na pasek przewijania, co całkowicie eliminuje "skakanie" strony na boki */
+html {
+	scrollbar-gutter: stable;
+}
+
+/* Niestandardowy wygląd paska przewijania nawiązujący do motywu dcmath */
+::-webkit-scrollbar {
+	width: 12px;
+	height: 12px;
+}
+
+::-webkit-scrollbar-track {
+	background: #0d1320;
+	border-left: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+::-webkit-scrollbar-thumb {
+	background: rgba(0, 229, 255, 0.3);
+	border-radius: 10px;
+	border: 3px solid #0d1320; /* Tworzy estetyczny margines wokół suwaka */
+	background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+	background: rgba(0, 229, 255, 0.7);
+	border: 3px solid #0d1320;
+	background-clip: padding-box;
+}
+
+/* Zabezpieczenie dla przeglądarki Firefox (korzysta z innych właściwości) */
+* {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(0, 229, 255, 0.3) #0d1320;
+}
+
 :root {
 	--bg: #0b1120;
 	--bg2: #0f172a;

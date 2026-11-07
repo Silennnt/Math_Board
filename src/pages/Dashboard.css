@@ -1,8 +1,9 @@
 .dashboard-container {
 	min-height: 100vh;
-	background-color: var(--bg);
-	color: var(--text);
-	padding: 30px;
+	padding: 20px;
+	position: relative;
+	z-index: 1;
+	background-color: transparent !important; /* Wymuszenie przezroczystości */
 }
 
 .dashboard-header {

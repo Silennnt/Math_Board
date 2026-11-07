@@ -4,6 +4,7 @@ import { signOut } from "firebase/auth";
 import { ref as dbRef, onValue, set, remove } from "firebase/database";
 import { ref as storageRef, deleteObject } from "firebase/storage";
 import { auth, database, storage } from "../firebase";
+import MathBackground from "../components/MathBackground";
 import { useAuth } from "../context/AuthContext";
 import "./Dashboard.css";
 
@@ -230,6 +231,7 @@ const Dashboard = () => {
 
 	return (
 		<>
+			<MathBackground />
 			<div className="dashboard-container">
 				<header className="dashboard-header">
 					<div className="user-info">
