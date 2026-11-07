@@ -25,9 +25,7 @@ const Dashboard = () => {
 	useEffect(() => {
 		if (currentUser && !isTutor) {
 			const userRef = dbRef(database, `users/${currentUser.uid}`);
-			set(userRef, { email: currentUser.email }).catch((err) =>
-				console.error("Błąd zapisu danych użytkownika:", err),
-			);
+			set(userRef, { email: currentUser.email }).catch(console.error);
 		}
 	}, [currentUser, isTutor]);
 
@@ -128,6 +126,30 @@ const Dashboard = () => {
 		});
 	};
 
+	// Wymuszenie pobierania pliku na dysk
+	const handleForceDownload = async (url, dateStr, e) => {
+		e.preventDefault();
+		try {
+			const response = await fetch(url);
+			const blob = await response.blob();
+			const objectUrl = window.URL.createObjectURL(blob);
+
+			const link = document.createElement("a");
+			link.href = objectUrl;
+			link.download = `Tablica_${dateStr.replace(/[., :\/\\]/g, "_")}.png`;
+			document.body.appendChild(link);
+			link.click();
+			document.body.removeChild(link);
+			window.URL.revokeObjectURL(objectUrl);
+		} catch (error) {
+			console.error(
+				"Wystąpił problem z pobieraniem w tle (CORS), otwieram w nowej karcie:",
+				error,
+			);
+			window.open(url, "_blank"); // Zabezpieczenie na wypadek blokady CORS
+		}
+	};
+
 	const openPreview = (url) => {
 		setPreviewImage(url);
 		setZoomScale(1);
@@ -154,46 +176,54 @@ const Dashboard = () => {
 
 		return (
 			<div className="gallery-grid">
-				{screenshots.map((shot) => (
-					<div key={shot.id} className="gallery-card">
-						<div
-							className="gallery-image-wrapper"
-							onClick={() => openPreview(shot.url)}
-						>
-							<img src={shot.url} alt="Zrzut tablicy z lekcji" loading="lazy" />
-							<div className="gallery-image-overlay">
-								<span>🔍 Kliknij, aby powiększyć</span>
+				{screenshots.map((shot) => {
+					const formattedDate = formatDate(shot.createdAt);
+					return (
+						<div key={shot.id} className="gallery-card">
+							<div
+								className="gallery-image-wrapper"
+								onClick={() => openPreview(shot.url)}
+							>
+								<img
+									src={shot.url}
+									alt="Zrzut tablicy z lekcji"
+									loading="lazy"
+								/>
+								<div className="gallery-image-overlay">
+									<span>🔍 Kliknij, aby powiększyć</span>
+								</div>
 							</div>
-						</div>
-						<div className="gallery-info">
-							<span>{formatDate(shot.createdAt)}</span>
-							<div className="gallery-actions">
-								<button
-									onClick={() => openPreview(shot.url)}
-									className="btn-action btn-preview"
-								>
-									Podgląd
-								</button>
-								<a
-									href={shot.url}
-									target="_blank"
-									rel="noopener noreferrer"
-									className="btn-action btn-download"
-								>
-									Pobierz
-								</a>
-								{isTutor && (
+							<div className="gallery-info">
+								<span>{formattedDate}</span>
+								<div className="gallery-actions">
 									<button
-										onClick={() => handleDeleteLesson(shot.id, shot.url)}
-										className="btn-action btn-delete"
+										onClick={() => openPreview(shot.url)}
+										className="btn-action btn-preview"
 									>
-										Usuń
+										Podgląd
 									</button>
-								)}
+									<a
+										href={shot.url}
+										onClick={(e) =>
+											handleForceDownload(shot.url, formattedDate, e)
+										}
+										className="btn-action btn-download"
+									>
+										Pobierz
+									</a>
+									{isTutor && (
+										<button
+											onClick={() => handleDeleteLesson(shot.id, shot.url)}
+											className="btn-action btn-delete"
+										>
+											Usuń
+										</button>
+									)}
+								</div>
 							</div>
 						</div>
-					</div>
-				))}
+					);
+				})}
 			</div>
 		);
 	};
@@ -303,7 +333,6 @@ const Dashboard = () => {
 				</main>
 			</div>
 
-			{}
 			{previewImage && (
 				<div className="preview-modal-overlay" onClick={closePreview}>
 					<div

@@ -263,7 +263,6 @@ const Room = () => {
 		setIsSaving(true);
 
 		try {
-			// 1. Algorytm Inteligentnego Kadrowania (Smart Bounding Box)
 			let minX = Infinity,
 				minY = Infinity,
 				maxX = -Infinity,
@@ -280,7 +279,6 @@ const Room = () => {
 				}
 			});
 
-			// Zabezpieczenie przed pustą tablicą
 			if (minX === Infinity) {
 				minX = 0;
 				minY = 0;
@@ -288,7 +286,6 @@ const Room = () => {
 				maxY = window.innerHeight;
 			}
 
-			// Estetyczny margines wokół notatek
 			const padding = 70;
 			minX -= padding;
 			minY -= padding;
@@ -297,7 +294,6 @@ const Room = () => {
 			const bWidth = maxX - minX;
 			const bHeight = maxY - minY;
 
-			// 2. Wymuszenie synchronicznych przekształceń w Konva do wygenerowania zrzutu całego obszaru
 			const stage = stageRef.current;
 			const bgRect = bgRectRef.current;
 
@@ -318,9 +314,8 @@ const Room = () => {
 				fillPatternOffsetY: minY,
 			});
 
-			stage.draw(); // Wymuszenie synchronicznego wyrenderowania
+			stage.draw();
 
-			// 3. Pobranie zrzutu obszaru (niezależnie od tego, co fizycznie mieści się na ekranie)
 			const dataUrl = stage.toDataURL({
 				x: minX,
 				y: minY,
@@ -329,13 +324,11 @@ const Room = () => {
 				pixelRatio: 2,
 			});
 
-			// 4. Błyskawiczne przywrócenie widoku dla użytkownika
 			stage.scale({ x: oldScaleX, y: oldScaleY });
 			stage.position({ x: oldX, y: oldY });
 			bgRect.setAttrs(oldBgAttrs);
 			stage.draw();
 
-			// 5. Zapis w chmurze
 			const timestamp = Date.now();
 			const imageRef = storageRef(
 				storage,
@@ -344,7 +337,6 @@ const Room = () => {
 			await uploadString(imageRef, dataUrl, "data_url");
 			const downloadUrl = await getDownloadURL(imageRef);
 
-			// 6. Zapis w bazie pod oryginalną datą UTWORZENIA cyklu (bądź obecną, jeśli z jakiegoś powodu jej brak)
 			const screenshotsDbRef = dbRef(database, `rooms/${roomId}/screenshots`);
 			const lessonDate = sessionCreatedAt || new Date().toISOString();
 
@@ -356,7 +348,6 @@ const Room = () => {
 			alert(
 				"Pomyślnie wygenerowano i zapisano pełny zrzut tablicy w historii ucznia.",
 			);
-			// Zauważ brak: remove(linesDbRef) i navigate() - uczeń i Ty możecie swobodnie rysować dalej!
 		} catch (error) {
 			console.error("Błąd zapisu zrzutu:", error);
 			alert("Wystąpił błąd podczas generowania zrzutu ekranu.");
@@ -533,7 +524,6 @@ const Room = () => {
 					onTouchEnd={handleMouseUp}
 				>
 					<Layer>
-						{/* Tło wyizolowane refem, z którym komunikuje się nowa funkcja kadrująca */}
 						<Rect
 							ref={bgRectRef}
 							x={-stageConfig.x / stageConfig.scale}
