@@ -108,6 +108,8 @@ const Room = () => {
 	const [selectedIds, setSelectedIds] = useState([]);
 	const [selectionBox, setSelectionBox] = useState(null);
 	const dragStartPositions = useRef({});
+	const isPanningMoved = useRef(false);
+	const [contextMenu, setContextMenu] = useState(null);
 
 	const colors = [
 		"#ffffff",
@@ -328,6 +330,7 @@ const Room = () => {
 
 	const handleWheel = (e) => {
 		e.evt.preventDefault();
+		if (contextMenu) setContextMenu(null);
 		const scaleBy = 1.1;
 		const stage = stageRef.current;
 		const oldScale = stageConfig.scale;
@@ -350,6 +353,7 @@ const Room = () => {
 	};
 
 	const handleDragStart = (e, id) => {
+		if (contextMenu) setContextMenu(null);
 		let activeIds = selectedIds;
 		if (!activeIds.includes(id)) {
 			activeIds = [id];
@@ -411,6 +415,9 @@ const Room = () => {
 	};
 
 	const handleMouseDown = (e) => {
+		isPanningMoved.current = false;
+		if (contextMenu) setContextMenu(null);
+
 		if (e.evt.button === 2 || e.evt.button === 1) {
 			setIsPanning(true);
 			return;
@@ -475,6 +482,7 @@ const Room = () => {
 		}
 
 		if (isPanning) {
+			isPanningMoved.current = true;
 			setStageConfig((prev) => ({
 				...prev,
 				x: prev.x + e.evt.movementX,
@@ -578,7 +586,45 @@ const Room = () => {
 		}
 	};
 
-	const handleContextMenu = (e) => e.preventDefault();
+	const handleContextMenu = (e) => {
+		e.evt.preventDefault();
+		if (isPanningMoved.current) {
+			isPanningMoved.current = false;
+			return;
+		}
+
+		const target = e.target;
+		const isCanvas =
+			target === target.getStage() || target === bgRectRef.current;
+		const id = target.id();
+
+		let currentSelection = selectedIds;
+
+		if (!isCanvas && id && !selectedIds.includes(id)) {
+			currentSelection = [id];
+			setSelectedIds(currentSelection);
+		}
+
+		setContextMenu({
+			x: e.evt.clientX,
+			y: e.evt.clientY,
+			hasSelection: currentSelection.length > 0,
+		});
+	};
+
+	const handleDeleteSelected = () => {
+		selectedIds.forEach((id) => {
+			const isLine = linesRef.current.some((l) => l.id === id);
+			const isImg = imagesRef.current.some((i) => i.id === id);
+			if (isLine) {
+				remove(dbRef(database, `rooms/${roomId}/lines/${id}`));
+			} else if (isImg) {
+				remove(dbRef(database, `rooms/${roomId}/images/${id}`));
+			}
+		});
+		setSelectedIds([]);
+		setContextMenu(null);
+	};
 
 	const eraseLine = (id) => {
 		const lineRef = dbRef(database, `rooms/${roomId}/lines/${id}`);
@@ -707,7 +753,6 @@ const Room = () => {
 		<div
 			ref={containerRef}
 			className="room-container"
-			onContextMenu={handleContextMenu}
 			style={{ backgroundColor: bgTheme === "dark" ? "#0d1320" : "#f8fafc" }}
 			tabIndex={0}
 		>
@@ -862,6 +907,21 @@ const Room = () => {
 					})}
 				</div>
 
+				{contextMenu && (
+					<div
+						className={`context-menu theme-${bgTheme}`}
+						style={{ top: contextMenu.y, left: contextMenu.x }}
+					>
+						{contextMenu.hasSelection ? (
+							<button onClick={handleDeleteSelected}>
+								Usuń zaznaczone ({selectedIds.length})
+							</button>
+						) : (
+							<span className="context-menu-empty">Brak zaznaczenia</span>
+						)}
+					</div>
+				)}
+
 				<Stage
 					ref={stageRef}
 					width={dimensions.width}
@@ -878,6 +938,7 @@ const Room = () => {
 					onTouchStart={handleMouseDown}
 					onTouchMove={handleMouseMove}
 					onTouchEnd={handleMouseUp}
+					onContextMenu={handleContextMenu}
 				>
 					<Layer>
 						<Rect
