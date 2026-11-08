@@ -137,6 +137,10 @@ const Room = () => {
 		y: window.innerHeight / 2,
 	});
 
+	const velocity = useRef({ x: 0, y: 0, time: 0 });
+	const lastPanPosition = useRef({ x: 0, y: 0, time: 0 });
+	const animationRef = useRef(null);
+
 	const colors = [
 		"#ffffff",
 		"#94a3b8",
@@ -490,6 +494,8 @@ const Room = () => {
 	const handleWheel = (e) => {
 		e.evt.preventDefault();
 		if (contextMenu) setContextMenu(null);
+		if (animationRef.current) cancelAnimationFrame(animationRef.current);
+
 		const scaleBy = 1.1;
 		const stage = stageRef.current;
 		const oldScale = stageConfig.scale;
@@ -601,9 +607,16 @@ const Room = () => {
 	const handleMouseDown = (e) => {
 		isPanningMoved.current = false;
 		if (contextMenu) setContextMenu(null);
+		if (animationRef.current) cancelAnimationFrame(animationRef.current);
 
 		if (e.evt.button === 2 || e.evt.button === 1) {
 			setIsPanning(true);
+			lastPanPosition.current = {
+				x: e.evt.clientX,
+				y: e.evt.clientY,
+				time: Date.now(),
+			};
+			velocity.current = { x: 0, y: 0, time: 0 };
 			return;
 		}
 
@@ -659,7 +672,6 @@ const Room = () => {
 		const pos = getLogicalPosition(e.target.getStage());
 		setCurrentLine({ tool, color, thickness, points: [pos.x, pos.y] });
 	};
-
 	const handleMouseMove = (e) => {
 		const stage = e.target.getStage();
 		const logicalPos = getLogicalPosition(stage);
@@ -680,6 +692,22 @@ const Room = () => {
 
 		if (isPanning) {
 			isPanningMoved.current = true;
+			const dt = now - lastPanPosition.current.time;
+
+			if (dt > 0) {
+				velocity.current = {
+					x: (e.evt.clientX - lastPanPosition.current.x) / dt,
+					y: (e.evt.clientY - lastPanPosition.current.y) / dt,
+					time: now,
+				};
+			}
+
+			lastPanPosition.current = {
+				x: e.evt.clientX,
+				y: e.evt.clientY,
+				time: now,
+			};
+
 			setStageConfig((prev) => ({
 				...prev,
 				x: prev.x + e.evt.movementX,
@@ -716,6 +744,33 @@ const Room = () => {
 	const handleMouseUp = () => {
 		if (isPanning) {
 			setIsPanning(false);
+
+			const now = Date.now();
+			if (now - velocity.current.time > 50) {
+				return;
+			}
+
+			let vx = velocity.current.x * 16.6;
+			let vy = velocity.current.y * 16.6;
+			const friction = 0.92;
+
+			const animateInertia = () => {
+				vx *= friction;
+				vy *= friction;
+
+				if (Math.abs(vx) > 0.2 || Math.abs(vy) > 0.2) {
+					setStageConfig((prev) => ({
+						...prev,
+						x: prev.x + vx,
+						y: prev.y + vy,
+					}));
+					animationRef.current = requestAnimationFrame(animateInertia);
+				}
+			};
+
+			if (Math.abs(vx) > 1 || Math.abs(vy) > 1) {
+				animationRef.current = requestAnimationFrame(animateInertia);
+			}
 			return;
 		}
 
@@ -765,7 +820,6 @@ const Room = () => {
 			setCurrentLine(null);
 		}
 	};
-
 	const handleMouseLeave = () => {
 		if (currentUser) {
 			const myCursorRef = dbRef(
