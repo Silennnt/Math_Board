@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Stage, Layer, Line, Rect } from "react-konva";
+import { Stage, Layer, Line, Rect, Image as KonvaImage } from "react-konva";
 import {
 	ref as dbRef,
 	onValue,
@@ -12,11 +12,33 @@ import {
 import {
 	ref as storageRef,
 	uploadString,
+	uploadBytes,
 	getDownloadURL,
 } from "firebase/storage";
 import { database, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import "./Room.css";
+
+const URLImage = ({ src, x, y, width, height }) => {
+	const [image, setImage] = useState(null);
+
+	useEffect(() => {
+		const img = new window.Image();
+		img.crossOrigin = "Anonymous";
+
+		img.onload = () => setImage(img);
+		img.onerror = () => {
+			console.error("Błąd ładowania obrazu CORS:", src);
+			const fallbackImg = new window.Image();
+			fallbackImg.onload = () => setImage(fallbackImg);
+			fallbackImg.src = src;
+		};
+
+		img.src = src;
+	}, [src]);
+
+	return <KonvaImage image={image} x={x} y={y} width={width} height={height} />;
+};
 
 const Room = () => {
 	const { roomId } = useParams();
@@ -24,7 +46,8 @@ const Room = () => {
 	const { currentUser } = useAuth();
 
 	const stageRef = useRef(null);
-	const bgRectRef = useRef(null); // Ref do kontrolowania tła przy eksporcie
+	const bgRectRef = useRef(null);
+	const containerRef = useRef(null);
 
 	const [lines, setLines] = useState([]);
 	const [currentLine, setCurrentLine] = useState(null);
@@ -35,7 +58,6 @@ const Room = () => {
 	const [cursors, setCursors] = useState({});
 	const lastCursorUpdate = useRef(0);
 
-	// Stan śledzący datę rozpoczęcia obecnego cyklu tablicy
 	const [sessionCreatedAt, setSessionCreatedAt] = useState(null);
 
 	const [tool, setTool] = useState("pen");
@@ -86,6 +108,25 @@ const Room = () => {
 		return canvas;
 	}, [bgTheme]);
 
+	const [images, setImages] = useState([]);
+
+	const linesRef = useRef(lines);
+	const stageConfigRef = useRef(stageConfig);
+
+	useEffect(() => {
+		linesRef.current = lines;
+	}, [lines]);
+
+	useEffect(() => {
+		stageConfigRef.current = stageConfig;
+	}, [stageConfig]);
+
+	useEffect(() => {
+		if (containerRef.current) {
+			containerRef.current.focus();
+		}
+	}, []);
+
 	useEffect(() => {
 		const handleResize = () =>
 			setDimensions({ width: window.innerWidth, height: window.innerHeight });
@@ -106,12 +147,21 @@ const Room = () => {
 			}
 		});
 
+		const imagesDbRef = dbRef(database, `rooms/${roomId}/images`);
+		const unsubscribeImages = onValue(imagesDbRef, (snapshot) => {
+			const data = snapshot.val();
+			if (data) {
+				setImages(Object.keys(data).map((key) => ({ id: key, ...data[key] })));
+			} else {
+				setImages([]);
+			}
+		});
+
 		const cursorsDbRef = dbRef(database, `rooms/${roomId}/cursors`);
 		const unsubscribeCursors = onValue(cursorsDbRef, (snapshot) => {
 			setCursors(snapshot.val() || {});
 		});
 
-		// Nasłuchiwanie informacji o dacie startu sesji
 		const sessionRef = dbRef(database, `rooms/${roomId}/sessionInfo/createdAt`);
 		const unsubscribeSession = onValue(sessionRef, (snapshot) => {
 			setSessionCreatedAt(snapshot.val());
@@ -127,9 +177,81 @@ const Room = () => {
 			unsubscribeLines();
 			unsubscribeCursors();
 			unsubscribeSession();
-			remove(myCursorRef).catch(console.error);
+			unsubscribeImages();
+			remove(myCursorRef).catch(() => {});
 		};
 	}, [roomId, currentUser]);
+
+	const handleKeyDown = (e) => {
+		if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+			e.preventDefault();
+			const myLines = linesRef.current.filter(
+				(l) => l.uid === currentUser?.uid,
+			);
+			if (myLines.length > 0) {
+				const lastLine = myLines[myLines.length - 1];
+				remove(dbRef(database, `rooms/${roomId}/lines/${lastLine.id}`));
+			}
+		}
+	};
+
+	const handlePaste = async (e) => {
+		const clipboardData = e.clipboardData || window.clipboardData;
+		if (!clipboardData) return;
+
+		const items = clipboardData.items;
+		let hasImage = false;
+
+		for (let i = 0; i < items.length; i++) {
+			if (items[i].type.indexOf("image") !== -1) {
+				hasImage = true;
+				const blob = items[i].getAsFile();
+				if (!blob) continue;
+
+				const localUrl = URL.createObjectURL(blob);
+				const img = new window.Image();
+
+				img.onload = async () => {
+					try {
+						const fileRef = storageRef(
+							storage,
+							`rooms/${roomId}/uploads/paste_${Date.now()}.png`,
+						);
+						await uploadBytes(fileRef, blob);
+						const downloadUrl = await getDownloadURL(fileRef);
+
+						const config = stageConfigRef.current;
+						const x =
+							(-config.x + window.innerWidth / 2 - img.width / 2) /
+							config.scale;
+						const y =
+							(-config.y + window.innerHeight / 2 - img.height / 2) /
+							config.scale;
+
+						const imagesRef = dbRef(database, `rooms/${roomId}/images`);
+						await push(imagesRef, {
+							url: downloadUrl,
+							x,
+							y,
+							width: img.width,
+							height: img.height,
+							uid: currentUser?.uid,
+						});
+					} catch (error) {
+						console.error("Błąd zapisu w Storage:", error);
+						alert("Firebase zablokował zapis. Sprawdź reguły Storage (F12).");
+					} finally {
+						URL.revokeObjectURL(localUrl);
+					}
+				};
+				img.src = localUrl;
+			}
+		}
+
+		if (hasImage) {
+			e.preventDefault();
+		}
+	};
 
 	const getLogicalPosition = (stage) => {
 		const pos = stage.getPointerPosition();
@@ -170,11 +292,10 @@ const Room = () => {
 
 		if (tool === "eraser-object") return;
 
-		// Jeżeli to pierwsza akcja w nowym cyklu, ustawiamy datę utworzenia
 		if (!sessionCreatedAt) {
 			const now = new Date().toISOString();
 			set(dbRef(database, `rooms/${roomId}/sessionInfo/createdAt`), now);
-			setSessionCreatedAt(now); // Optymistyczna aktualizacja UI
+			setSessionCreatedAt(now);
 		}
 
 		setIsDrawing(true);
@@ -196,7 +317,7 @@ const Room = () => {
 				x: logicalPos.x,
 				y: logicalPos.y,
 				email: currentUser.email,
-			}).catch(console.error);
+			}).catch(() => {});
 			lastCursorUpdate.current = now;
 		}
 
@@ -225,7 +346,9 @@ const Room = () => {
 		setIsDrawing(false);
 		if (currentLine) {
 			const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
-			push(linesDbRef, currentLine).catch(console.error);
+			push(linesDbRef, { ...currentLine, uid: currentUser.uid }).catch(
+				() => {},
+			);
 			setCurrentLine(null);
 		}
 	};
@@ -236,7 +359,7 @@ const Room = () => {
 				database,
 				`rooms/${roomId}/cursors/${currentUser.uid}`,
 			);
-			remove(myCursorRef).catch(console.error);
+			remove(myCursorRef).catch(() => {});
 		}
 	};
 
@@ -244,16 +367,17 @@ const Room = () => {
 
 	const eraseLine = (id) => {
 		const lineRef = dbRef(database, `rooms/${roomId}/lines/${id}`);
-		remove(lineRef).catch(console.error);
+		remove(lineRef).catch(() => {});
 	};
 
 	const handleClearBoard = () => {
 		if (
 			window.confirm(
-				"UWAGA: To trwale usunie wszystkie rysunki z obecnego cyklu (dla Ciebie i ucznia). Upewnij się, że wcześniej wykonałeś zrzut. Kontynuować?",
+				"UWAGA: To trwale usunie wszystkie rysunki i zrzuty z obecnego cyklu (dla Ciebie i ucznia). Upewnij się, że wcześniej wykonałeś zrzut. Kontynuować?",
 			)
 		) {
 			remove(dbRef(database, `rooms/${roomId}/lines`));
+			remove(dbRef(database, `rooms/${roomId}/images`));
 			remove(dbRef(database, `rooms/${roomId}/sessionInfo`));
 		}
 	};
@@ -277,6 +401,13 @@ const Room = () => {
 					if (y < minY) minY = y;
 					if (y > maxY) maxY = y;
 				}
+			});
+
+			images.forEach((img) => {
+				if (img.x < minX) minX = img.x;
+				if (img.x + img.width > maxX) maxX = img.x + img.width;
+				if (img.y < minY) minY = img.y;
+				if (img.y + img.height > maxY) maxY = img.y + img.height;
 			});
 
 			if (minX === Infinity) {
@@ -349,7 +480,6 @@ const Room = () => {
 				"Pomyślnie wygenerowano i zapisano pełny zrzut tablicy w historii ucznia.",
 			);
 		} catch (error) {
-			console.error("Błąd zapisu zrzutu:", error);
 			alert("Wystąpił błąd podczas generowania zrzutu ekranu.");
 		} finally {
 			setIsSaving(false);
@@ -358,9 +488,13 @@ const Room = () => {
 
 	return (
 		<div
+			ref={containerRef}
 			className="room-container"
 			onContextMenu={handleContextMenu}
+			onKeyDown={handleKeyDown}
+			onPaste={handlePaste}
 			style={{ backgroundColor: bgTheme === "dark" ? "#0d1320" : "#f8fafc" }}
+			tabIndex={0}
 		>
 			<aside className={`room-toolbar left-toolbar theme-${bgTheme}`}>
 				<div className="toolbar-section">
@@ -540,6 +674,16 @@ const Room = () => {
 					</Layer>
 
 					<Layer>
+						{images.map((img) => (
+							<URLImage
+								key={img.id}
+								src={img.url}
+								x={img.x}
+								y={img.y}
+								width={img.width}
+								height={img.height}
+							/>
+						))}
 						{lines.map((line) => (
 							<Line
 								key={line.id}
