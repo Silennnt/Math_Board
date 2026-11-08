@@ -283,11 +283,13 @@ const Room = () => {
 		const dy = logicalY - center.y;
 		const newSelectedIds = [];
 
+		const batchTimestamp = Date.now();
+
 		cLines.forEach((l) => {
 			const newLine = {
 				...l,
 				uid: currentUser.uid,
-				timestamp: Date.now(),
+				timestamp: batchTimestamp,
 				x: (l.x || 0) + dx,
 				y: (l.y || 0) + dy,
 			};
@@ -300,7 +302,7 @@ const Room = () => {
 			const newImg = {
 				...img,
 				uid: currentUser.uid,
-				timestamp: Date.now(),
+				timestamp: batchTimestamp,
 				x: img.x + dx,
 				y: img.y + dy,
 			};
@@ -338,12 +340,18 @@ const Room = () => {
 					allMyItems.sort((a, b) => b.timestamp - a.timestamp);
 
 					if (allMyItems.length > 0) {
-						const lastItem = allMyItems[0];
-						if (lastItem.type === "line") {
-							remove(dbRef(database, `rooms/${roomId}/lines/${lastItem.id}`));
-						} else {
-							remove(dbRef(database, `rooms/${roomId}/images/${lastItem.id}`));
-						}
+						const targetTimestamp = allMyItems[0].timestamp;
+						const itemsToRemove = allMyItems.filter(
+							(item) => item.timestamp === targetTimestamp,
+						);
+
+						itemsToRemove.forEach((item) => {
+							if (item.type === "line") {
+								remove(dbRef(database, `rooms/${roomId}/lines/${item.id}`));
+							} else {
+								remove(dbRef(database, `rooms/${roomId}/images/${item.id}`));
+							}
+						});
 					}
 				} else if (key === "c") {
 					e.preventDefault();
@@ -362,6 +370,7 @@ const Room = () => {
 
 			const items = clipboardData.items;
 			let hasImage = false;
+			const batchTimestamp = Date.now();
 
 			for (let i = 0; i < items.length; i++) {
 				if (items[i].type.indexOf("image") !== -1) {
@@ -403,7 +412,7 @@ const Room = () => {
 								width: img.width,
 								height: img.height,
 								uid: currentUser?.uid,
-								timestamp: Date.now(),
+								timestamp: batchTimestamp,
 							});
 						} catch (error) {
 						} finally {
@@ -670,7 +679,12 @@ const Room = () => {
 
 		setIsDrawing(true);
 		const pos = getLogicalPosition(e.target.getStage());
-		setCurrentLine({ tool, color, thickness, points: [pos.x, pos.y] });
+		setCurrentLine({
+			tool,
+			color,
+			thickness,
+			points: [pos.x, pos.y, pos.x, pos.y + 0.01],
+		});
 	};
 	const handleMouseMove = (e) => {
 		const stage = e.target.getStage();
@@ -735,12 +749,27 @@ const Room = () => {
 		)
 			return;
 
-		setCurrentLine((prev) => ({
-			...prev,
-			points: prev.points.concat([logicalPos.x, logicalPos.y]),
-		}));
-	};
+		setCurrentLine((prev) => {
+			const pts = prev.points;
+			if (pts.length >= 2) {
+				const lastX = pts[pts.length - 2];
+				const lastY = pts[pts.length - 1];
+				const dx = logicalPos.x - lastX;
+				const dy = logicalPos.y - lastY;
+				const distSq = dx * dx + dy * dy;
+				const threshold = 12 / (stageConfig.scale * stageConfig.scale);
 
+				if (distSq < threshold) {
+					return prev;
+				}
+			}
+
+			return {
+				...prev,
+				points: pts.concat([logicalPos.x, logicalPos.y]),
+			};
+		});
+	};
 	const handleMouseUp = () => {
 		if (isPanning) {
 			setIsPanning(false);
