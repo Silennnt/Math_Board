@@ -1,6 +1,13 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { Stage, Layer, Line, Rect, Image as KonvaImage } from "react-konva";
+import {
+	Stage,
+	Layer,
+	Line,
+	Rect,
+	Image as KonvaImage,
+	Transformer,
+} from "react-konva";
 import {
 	ref as dbRef,
 	onValue,
@@ -27,10 +34,14 @@ const URLImage = ({
 	y,
 	width,
 	height,
+	scaleX = 1,
+	scaleY = 1,
+	rotation = 0,
 	isDraggable,
 	onDragStart,
 	onDragMove,
 	onDragEnd,
+	onTransformEnd,
 	isSelected,
 }) => {
 	const [image, setImage] = useState(null);
@@ -52,15 +63,20 @@ const URLImage = ({
 	return (
 		<KonvaImage
 			id={id}
+			name="board-item"
 			image={image}
 			x={x}
 			y={y}
+			scaleX={scaleX}
+			scaleY={scaleY}
+			rotation={rotation}
 			width={width}
 			height={height}
 			draggable={isDraggable}
 			onDragStart={(e) => onDragStart(e, id)}
 			onDragMove={(e) => onDragMove(e, id)}
 			onDragEnd={(e) => onDragEnd(e, id)}
+			onTransformEnd={(e) => onTransformEnd(e, id)}
 			shadowColor={isSelected ? "#00e5ff" : "transparent"}
 			shadowBlur={isSelected ? 10 : 0}
 			onMouseEnter={(e) => {
@@ -81,6 +97,7 @@ const Room = () => {
 	const stageRef = useRef(null);
 	const bgRectRef = useRef(null);
 	const containerRef = useRef(null);
+	const transformerRef = useRef(null);
 
 	const [lines, setLines] = useState([]);
 	const [currentLine, setCurrentLine] = useState(null);
@@ -182,6 +199,19 @@ const Room = () => {
 		return () => window.removeEventListener("mousemove", handleGlobalMouseMove);
 	}, []);
 
+	useEffect(() => {
+		if (tool === "select" && transformerRef.current) {
+			const stage = stageRef.current;
+			const nodes = selectedIds
+				.map((id) => stage.findOne("#" + id))
+				.filter(Boolean);
+			transformerRef.current.nodes(nodes);
+			transformerRef.current.getLayer().batchDraw();
+		} else if (transformerRef.current) {
+			transformerRef.current.nodes([]);
+		}
+	}, [selectedIds, tool, lines, images]);
+
 	const handleCopy = () => {
 		if (selectedIds.length === 0) return;
 		const copiedLines = linesRef.current.filter((l) =>
@@ -196,25 +226,19 @@ const Room = () => {
 			maxX = -Infinity,
 			maxY = -Infinity;
 
-		copiedLines.forEach((l) => {
-			const lx = l.x || 0;
-			const ly = l.y || 0;
-			for (let i = 0; i < l.points.length; i += 2) {
-				const px = l.points[i] + lx;
-				const py = l.points[i + 1] + ly;
-				if (px < minX) minX = px;
-				if (px > maxX) maxX = px;
-				if (py < minY) minY = py;
-				if (py > maxY) maxY = py;
-			}
-		});
-
-		copiedImages.forEach((img) => {
-			if (img.x < minX) minX = img.x;
-			if (img.x + img.width > maxX) maxX = img.x + img.width;
-			if (img.y < minY) minY = img.y;
-			if (img.y + img.height > maxY) maxY = img.y + img.height;
-		});
+		if (stageRef.current) {
+			const stage = stageRef.current;
+			selectedIds.forEach((id) => {
+				const node = stage.findOne("#" + id);
+				if (node) {
+					const rect = node.getClientRect({ skipTransform: true });
+					if (rect.x < minX) minX = rect.x;
+					if (rect.y < minY) minY = rect.y;
+					if (rect.x + rect.width > maxX) maxX = rect.x + rect.width;
+					if (rect.y + rect.height > maxY) maxY = rect.y + rect.height;
+				}
+			});
+		}
 
 		const cx = minX === Infinity ? 0 : (minX + maxX) / 2;
 		const cy = minY === Infinity ? 0 : (minY + maxY) / 2;
@@ -323,6 +347,8 @@ const Room = () => {
 				} else if (key === "v") {
 					handleInternalPaste();
 				}
+			} else if (e.key === "Delete" || e.key === "Backspace") {
+				handleDeleteSelected();
 			}
 		};
 
@@ -367,6 +393,9 @@ const Room = () => {
 								url: downloadUrl,
 								x,
 								y,
+								scaleX: 1,
+								scaleY: 1,
+								rotation: 0,
 								width: img.width,
 								height: img.height,
 								uid: currentUser?.uid,
@@ -544,6 +573,31 @@ const Room = () => {
 		}
 	};
 
+	const handleTransformEnd = (e, id) => {
+		const node = e.target;
+		const updates = {};
+		const isLine = linesRef.current.some((l) => l.id === id);
+		const isImg = imagesRef.current.some((i) => i.id === id);
+
+		if (isLine) {
+			updates[`lines/${id}/x`] = node.x();
+			updates[`lines/${id}/y`] = node.y();
+			updates[`lines/${id}/scaleX`] = node.scaleX();
+			updates[`lines/${id}/scaleY`] = node.scaleY();
+			updates[`lines/${id}/rotation`] = node.rotation();
+		} else if (isImg) {
+			updates[`images/${id}/x`] = node.x();
+			updates[`images/${id}/y`] = node.y();
+			updates[`images/${id}/scaleX`] = node.scaleX();
+			updates[`images/${id}/scaleY`] = node.scaleY();
+			updates[`images/${id}/rotation`] = node.rotation();
+		}
+
+		if (Object.keys(updates).length > 0) {
+			update(dbRef(database, `rooms/${roomId}`), updates).catch(() => {});
+		}
+	};
+
 	const handleMouseDown = (e) => {
 		isPanningMoved.current = false;
 		if (contextMenu) setContextMenu(null);
@@ -553,6 +607,10 @@ const Room = () => {
 			return;
 		}
 
+		const clickedOnTransformer =
+			e.target.getParent()?.className === "Transformer";
+		if (clickedOnTransformer) return;
+
 		if (tool !== "select") {
 			setSelectedIds([]);
 		}
@@ -560,6 +618,7 @@ const Room = () => {
 		if (tool === "select") {
 			const clickedOnEmpty =
 				e.target === e.target.getStage() || e.target === bgRectRef.current;
+
 			if (clickedOnEmpty) {
 				const pos = getLogicalPosition(e.target.getStage());
 				setSelectionBox({
@@ -573,8 +632,16 @@ const Room = () => {
 				setSelectedIds([]);
 			} else {
 				const id = e.target.id();
-				if (id && !selectedIds.includes(id)) {
-					setSelectedIds([id]);
+				if (id) {
+					if (!e.evt.shiftKey && !selectedIds.includes(id)) {
+						setSelectedIds([id]);
+					} else if (e.evt.shiftKey) {
+						if (selectedIds.includes(id)) {
+							setSelectedIds(selectedIds.filter((selId) => selId !== id));
+						} else {
+							setSelectedIds([...selectedIds, id]);
+						}
+					}
 				}
 			}
 			return;
@@ -653,40 +720,30 @@ const Room = () => {
 		}
 
 		if (tool === "select" && selectionBox) {
-			const box = selectionBox;
+			const stage = stageRef.current;
+
+			const boxRect = {
+				x: selectionBox.x * stageConfig.scale + stageConfig.x,
+				y: selectionBox.y * stageConfig.scale + stageConfig.y,
+				width: selectionBox.width * stageConfig.scale,
+				height: selectionBox.height * stageConfig.scale,
+			};
+
+			const items = stage.find(".board-item");
 			const newSelected = [];
 
-			images.forEach((img) => {
+			items.forEach((item) => {
+				const itemRect = item.getClientRect({ skipTransform: false });
 				if (
 					!(
-						img.x > box.x + box.width ||
-						img.x + img.width < box.x ||
-						img.y > box.y + box.height ||
-						img.y + img.height < box.y
+						itemRect.x > boxRect.x + boxRect.width ||
+						itemRect.x + itemRect.width < boxRect.x ||
+						itemRect.y > boxRect.y + boxRect.height ||
+						itemRect.y + itemRect.height < boxRect.y
 					)
 				) {
-					newSelected.push(img.id);
+					newSelected.push(item.id());
 				}
-			});
-
-			lines.forEach((line) => {
-				const lx = line.x || 0;
-				const ly = line.y || 0;
-				let hasPointInside = false;
-				for (let i = 0; i < line.points.length; i += 2) {
-					const px = line.points[i] + lx;
-					const py = line.points[i + 1] + ly;
-					if (
-						px >= box.x &&
-						px <= box.x + box.width &&
-						py >= box.y &&
-						py <= box.y + box.height
-					) {
-						hasPointInside = true;
-						break;
-					}
-				}
-				if (hasPointInside) newSelected.push(line.id);
 			});
 
 			setSelectedIds(newSelected);
@@ -701,6 +758,9 @@ const Room = () => {
 				...currentLine,
 				uid: currentUser.uid,
 				timestamp: Date.now(),
+				scaleX: 1,
+				scaleY: 1,
+				rotation: 0,
 			}).catch(() => {});
 			setCurrentLine(null);
 		}
@@ -786,29 +846,34 @@ const Room = () => {
 		setIsSaving(true);
 
 		try {
+			const stage = stageRef.current;
+			const bgRect = bgRectRef.current;
+
+			const oldScaleX = stage.scaleX();
+			const oldScaleY = stage.scaleY();
+			const oldX = stage.x();
+			const oldY = stage.y();
+			const oldBgAttrs = { ...bgRect.attrs };
+
+			stage.scale({ x: 1, y: 1 });
+			stage.position({ x: 0, y: 0 });
+			stage.draw();
+
 			let minX = Infinity,
 				minY = Infinity,
 				maxX = -Infinity,
 				maxY = -Infinity;
 
-			lines.forEach((line) => {
-				const offsetX = line.x || 0;
-				const offsetY = line.y || 0;
-				for (let i = 0; i < line.points.length; i += 2) {
-					const x = line.points[i] + offsetX;
-					const y = line.points[i + 1] + offsetY;
-					if (x < minX) minX = x;
-					if (x > maxX) maxX = x;
-					if (y < minY) minY = y;
-					if (y > maxY) maxY = y;
-				}
-			});
+			const items = stage.find(".board-item");
 
-			images.forEach((img) => {
-				if (img.x < minX) minX = img.x;
-				if (img.x + img.width > maxX) maxX = img.x + img.width;
-				if (img.y < minY) minY = img.y;
-				if (img.y + img.height > maxY) maxY = img.y + img.height;
+			items.forEach((item) => {
+				const rect = item.getClientRect({ skipTransform: false });
+				if (rect.width > 0 && rect.height > 0) {
+					if (rect.x < minX) minX = rect.x;
+					if (rect.y < minY) minY = rect.y;
+					if (rect.x + rect.width > maxX) maxX = rect.x + rect.width;
+					if (rect.y + rect.height > maxY) maxY = rect.y + rect.height;
+				}
 			});
 
 			if (minX === Infinity) {
@@ -826,17 +891,6 @@ const Room = () => {
 			const bWidth = maxX - minX;
 			const bHeight = maxY - minY;
 
-			const stage = stageRef.current;
-			const bgRect = bgRectRef.current;
-
-			const oldScaleX = stage.scaleX();
-			const oldScaleY = stage.scaleY();
-			const oldX = stage.x();
-			const oldY = stage.y();
-			const oldBgAttrs = { ...bgRect.attrs };
-
-			stage.scale({ x: 1, y: 1 });
-			stage.position({ x: 0, y: 0 });
 			bgRect.setAttrs({
 				x: minX,
 				y: minY,
@@ -1114,12 +1168,16 @@ const Room = () => {
 								src={img.url}
 								x={img.x}
 								y={img.y}
+								scaleX={img.scaleX || 1}
+								scaleY={img.scaleY || 1}
+								rotation={img.rotation || 0}
 								width={img.width}
 								height={img.height}
 								isDraggable={tool === "select"}
 								onDragStart={handleDragStart}
 								onDragMove={handleDragMove}
 								onDragEnd={handleDragEnd}
+								onTransformEnd={handleTransformEnd}
 								isSelected={selectedIds.includes(img.id)}
 							/>
 						))}
@@ -1127,8 +1185,12 @@ const Room = () => {
 							<Line
 								key={line.id}
 								id={line.id}
+								name="board-item"
 								x={line.x || 0}
 								y={line.y || 0}
+								scaleX={line.scaleX || 1}
+								scaleY={line.scaleY || 1}
+								rotation={line.rotation || 0}
 								points={line.points || []}
 								stroke={line.color}
 								strokeWidth={line.thickness || 4}
@@ -1139,6 +1201,7 @@ const Room = () => {
 								onDragStart={(e) => handleDragStart(e, line.id)}
 								onDragMove={(e) => handleDragMove(e, line.id)}
 								onDragEnd={(e) => handleDragEnd(e, line.id)}
+								onTransformEnd={(e) => handleTransformEnd(e, line.id)}
 								shadowColor={
 									selectedIds.includes(line.id) ? "#00e5ff" : "transparent"
 								}
@@ -1197,6 +1260,22 @@ const Room = () => {
 								stroke="#00e5ff"
 								strokeWidth={1 / stageConfig.scale}
 								dash={[4 / stageConfig.scale, 4 / stageConfig.scale]}
+							/>
+						)}
+
+						{tool === "select" && (
+							<Transformer
+								ref={transformerRef}
+								boundBoxFunc={(oldBox, newBox) => {
+									if (newBox.width < 5 || newBox.height < 5) {
+										return oldBox;
+									}
+									return newBox;
+								}}
+								borderStroke="#00e5ff"
+								anchorStroke="#00e5ff"
+								anchorFill="#0d1320"
+								anchorSize={8}
 							/>
 						)}
 					</Layer>
