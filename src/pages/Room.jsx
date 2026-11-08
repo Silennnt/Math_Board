@@ -110,6 +110,15 @@ const Room = () => {
 	const dragStartPositions = useRef({});
 	const isPanningMoved = useRef(false);
 	const [contextMenu, setContextMenu] = useState(null);
+	const internalClipboard = useRef({
+		lines: [],
+		images: [],
+		center: { x: 0, y: 0 },
+	});
+	const globalMousePos = useRef({
+		x: window.innerWidth / 2,
+		y: window.innerHeight / 2,
+	});
 
 	const colors = [
 		"#ffffff",
@@ -166,35 +175,153 @@ const Room = () => {
 	}, [stageConfig]);
 
 	useEffect(() => {
+		const handleGlobalMouseMove = (e) => {
+			globalMousePos.current = { x: e.clientX, y: e.clientY };
+		};
+		window.addEventListener("mousemove", handleGlobalMouseMove);
+		return () => window.removeEventListener("mousemove", handleGlobalMouseMove);
+	}, []);
+
+	const handleCopy = () => {
+		if (selectedIds.length === 0) return;
+		const copiedLines = linesRef.current.filter((l) =>
+			selectedIds.includes(l.id),
+		);
+		const copiedImages = imagesRef.current.filter((i) =>
+			selectedIds.includes(i.id),
+		);
+
+		let minX = Infinity,
+			minY = Infinity,
+			maxX = -Infinity,
+			maxY = -Infinity;
+
+		copiedLines.forEach((l) => {
+			const lx = l.x || 0;
+			const ly = l.y || 0;
+			for (let i = 0; i < l.points.length; i += 2) {
+				const px = l.points[i] + lx;
+				const py = l.points[i + 1] + ly;
+				if (px < minX) minX = px;
+				if (px > maxX) maxX = px;
+				if (py < minY) minY = py;
+				if (py > maxY) maxY = py;
+			}
+		});
+
+		copiedImages.forEach((img) => {
+			if (img.x < minX) minX = img.x;
+			if (img.x + img.width > maxX) maxX = img.x + img.width;
+			if (img.y < minY) minY = img.y;
+			if (img.y + img.height > maxY) maxY = img.y + img.height;
+		});
+
+		const cx = minX === Infinity ? 0 : (minX + maxX) / 2;
+		const cy = minY === Infinity ? 0 : (minY + maxY) / 2;
+
+		internalClipboard.current = {
+			lines: copiedLines,
+			images: copiedImages,
+			center: { x: cx, y: cy },
+		};
+		setContextMenu(null);
+	};
+
+	const handleInternalPaste = (targetPos = null) => {
+		const {
+			lines: cLines,
+			images: cImages,
+			center,
+		} = internalClipboard.current;
+		if (cLines.length === 0 && cImages.length === 0) return;
+
+		let logicalX, logicalY;
+		if (targetPos) {
+			logicalX = targetPos.x;
+			logicalY = targetPos.y;
+		} else {
+			const config = stageConfigRef.current;
+			let containerRect = { left: 0, top: 0 };
+			if (containerRef.current) {
+				containerRect = containerRef.current.getBoundingClientRect();
+			}
+			const pointerX = globalMousePos.current.x - containerRect.left;
+			const pointerY = globalMousePos.current.y - containerRect.top;
+			logicalX = (pointerX - config.x) / config.scale;
+			logicalY = (pointerY - config.y) / config.scale;
+		}
+
+		const dx = logicalX - center.x;
+		const dy = logicalY - center.y;
+		const newSelectedIds = [];
+
+		cLines.forEach((l) => {
+			const newLine = {
+				...l,
+				uid: currentUser.uid,
+				timestamp: Date.now(),
+				x: (l.x || 0) + dx,
+				y: (l.y || 0) + dy,
+			};
+			delete newLine.id;
+			const newRef = push(dbRef(database, `rooms/${roomId}/lines`), newLine);
+			newSelectedIds.push(newRef.key);
+		});
+
+		cImages.forEach((img) => {
+			const newImg = {
+				...img,
+				uid: currentUser.uid,
+				timestamp: Date.now(),
+				x: img.x + dx,
+				y: img.y + dy,
+			};
+			delete newImg.id;
+			const newRef = push(dbRef(database, `rooms/${roomId}/images`), newImg);
+			newSelectedIds.push(newRef.key);
+		});
+
+		setSelectedIds(newSelectedIds);
+		setContextMenu(null);
+	};
+
+	useEffect(() => {
 		if (containerRef.current) {
 			containerRef.current.focus();
 		}
 
 		const handleKeyDown = (e) => {
-			if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-				e.preventDefault();
+			if (e.ctrlKey || e.metaKey) {
+				const key = e.key.toLowerCase();
+				if (key === "z") {
+					e.preventDefault();
+					const myLines = linesRef.current.filter(
+						(l) => l.uid === currentUser?.uid,
+					);
+					const myImages = imagesRef.current.filter(
+						(img) => img.uid === currentUser?.uid,
+					);
 
-				const myLines = linesRef.current.filter(
-					(l) => l.uid === currentUser?.uid,
-				);
-				const myImages = imagesRef.current.filter(
-					(img) => img.uid === currentUser?.uid,
-				);
+					const allMyItems = [
+						...myLines.map((l) => ({ ...l, type: "line" })),
+						...myImages.map((img) => ({ ...img, type: "image" })),
+					].filter((item) => item.timestamp);
 
-				const allMyItems = [
-					...myLines.map((l) => ({ ...l, type: "line" })),
-					...myImages.map((img) => ({ ...img, type: "image" })),
-				].filter((item) => item.timestamp);
+					allMyItems.sort((a, b) => b.timestamp - a.timestamp);
 
-				allMyItems.sort((a, b) => b.timestamp - a.timestamp);
-
-				if (allMyItems.length > 0) {
-					const lastItem = allMyItems[0];
-					if (lastItem.type === "line") {
-						remove(dbRef(database, `rooms/${roomId}/lines/${lastItem.id}`));
-					} else {
-						remove(dbRef(database, `rooms/${roomId}/images/${lastItem.id}`));
+					if (allMyItems.length > 0) {
+						const lastItem = allMyItems[0];
+						if (lastItem.type === "line") {
+							remove(dbRef(database, `rooms/${roomId}/lines/${lastItem.id}`));
+						} else {
+							remove(dbRef(database, `rooms/${roomId}/images/${lastItem.id}`));
+						}
 					}
+				} else if (key === "c") {
+					e.preventDefault();
+					handleCopy();
+				} else if (key === "v") {
+					handleInternalPaste();
 				}
 			}
 		};
@@ -225,12 +352,15 @@ const Room = () => {
 							const downloadUrl = await getDownloadURL(fileRef);
 
 							const config = stageConfigRef.current;
-							const x =
-								(-config.x + window.innerWidth / 2 - img.width / 2) /
-								config.scale;
-							const y =
-								(-config.y + window.innerHeight / 2 - img.height / 2) /
-								config.scale;
+							let containerRect = { left: 0, top: 0 };
+							if (containerRef.current) {
+								containerRect = containerRef.current.getBoundingClientRect();
+							}
+							const pointerX = globalMousePos.current.x - containerRect.left;
+							const pointerY = globalMousePos.current.y - containerRect.top;
+
+							const x = (pointerX - config.x) / config.scale - img.width / 2;
+							const y = (pointerY - config.y) / config.scale - img.height / 2;
 
 							const imgDbRef = dbRef(database, `rooms/${roomId}/images`);
 							await push(imgDbRef, {
@@ -263,7 +393,7 @@ const Room = () => {
 			document.removeEventListener("keydown", handleKeyDown);
 			document.removeEventListener("paste", handlePaste);
 		};
-	}, [roomId, currentUser]);
+	}, [roomId, currentUser, selectedIds]);
 
 	useEffect(() => {
 		const handleResize = () =>
@@ -605,10 +735,18 @@ const Room = () => {
 			setSelectedIds(currentSelection);
 		}
 
+		const hasClipboardData =
+			internalClipboard.current.lines.length > 0 ||
+			internalClipboard.current.images.length > 0;
+
+		const stagePos = getLogicalPosition(e.target.getStage());
+
 		setContextMenu({
 			x: e.evt.clientX,
 			y: e.evt.clientY,
+			logicalPos: stagePos,
 			hasSelection: currentSelection.length > 0,
+			hasClipboardData: hasClipboardData,
 		});
 	};
 
@@ -912,12 +1050,24 @@ const Room = () => {
 						className={`context-menu theme-${bgTheme}`}
 						style={{ top: contextMenu.y, left: contextMenu.x }}
 					>
-						{contextMenu.hasSelection ? (
-							<button onClick={handleDeleteSelected}>
-								Usuń zaznaczone ({selectedIds.length})
+						{contextMenu.hasSelection && (
+							<>
+								<button onClick={handleCopy} style={{ color: "var(--cyan)" }}>
+									Kopiuj
+								</button>
+								<button onClick={handleDeleteSelected}>Usuń</button>
+							</>
+						)}
+						{contextMenu.hasClipboardData && (
+							<button
+								onClick={() => handleInternalPaste(contextMenu.logicalPos)}
+								style={{ color: "var(--cyan)" }}
+							>
+								Wklej
 							</button>
-						) : (
-							<span className="context-menu-empty">Brak zaznaczenia</span>
+						)}
+						{!contextMenu.hasSelection && !contextMenu.hasClipboardData && (
+							<span className="context-menu-empty">Brak akcji</span>
 						)}
 					</div>
 				)}
