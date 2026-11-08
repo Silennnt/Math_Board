@@ -7,6 +7,7 @@ import {
 	push,
 	remove,
 	set,
+	update,
 	onDisconnect,
 } from "firebase/database";
 import {
@@ -19,7 +20,19 @@ import { database, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import "./Room.css";
 
-const URLImage = ({ src, x, y, width, height }) => {
+const URLImage = ({
+	id,
+	src,
+	x,
+	y,
+	width,
+	height,
+	isDraggable,
+	onDragStart,
+	onDragMove,
+	onDragEnd,
+	isSelected,
+}) => {
 	const [image, setImage] = useState(null);
 
 	useEffect(() => {
@@ -28,7 +41,6 @@ const URLImage = ({ src, x, y, width, height }) => {
 
 		img.onload = () => setImage(img);
 		img.onerror = () => {
-			console.error("Błąd ładowania obrazu CORS:", src);
 			const fallbackImg = new window.Image();
 			fallbackImg.onload = () => setImage(fallbackImg);
 			fallbackImg.src = src;
@@ -37,7 +49,28 @@ const URLImage = ({ src, x, y, width, height }) => {
 		img.src = src;
 	}, [src]);
 
-	return <KonvaImage image={image} x={x} y={y} width={width} height={height} />;
+	return (
+		<KonvaImage
+			id={id}
+			image={image}
+			x={x}
+			y={y}
+			width={width}
+			height={height}
+			draggable={isDraggable}
+			onDragStart={(e) => onDragStart(e, id)}
+			onDragMove={(e) => onDragMove(e, id)}
+			onDragEnd={(e) => onDragEnd(e, id)}
+			shadowColor={isSelected ? "#00e5ff" : "transparent"}
+			shadowBlur={isSelected ? 10 : 0}
+			onMouseEnter={(e) => {
+				if (isDraggable) e.target.getStage().container().style.cursor = "move";
+			}}
+			onMouseLeave={(e) => {
+				e.target.getStage().container().style.cursor = "default";
+			}}
+		/>
+	);
 };
 
 const Room = () => {
@@ -71,6 +104,10 @@ const Room = () => {
 		width: window.innerWidth,
 		height: window.innerHeight,
 	});
+
+	const [selectedIds, setSelectedIds] = useState([]);
+	const [selectionBox, setSelectionBox] = useState(null);
+	const dragStartPositions = useRef({});
 
 	const colors = [
 		"#ffffff",
@@ -111,11 +148,16 @@ const Room = () => {
 	const [images, setImages] = useState([]);
 
 	const linesRef = useRef(lines);
+	const imagesRef = useRef(images);
 	const stageConfigRef = useRef(stageConfig);
 
 	useEffect(() => {
 		linesRef.current = lines;
 	}, [lines]);
+
+	useEffect(() => {
+		imagesRef.current = images;
+	}, [images]);
 
 	useEffect(() => {
 		stageConfigRef.current = stageConfig;
@@ -125,7 +167,101 @@ const Room = () => {
 		if (containerRef.current) {
 			containerRef.current.focus();
 		}
-	}, []);
+
+		const handleKeyDown = (e) => {
+			if ((e.ctrlKey || e.metaKey) && e.key === "z") {
+				e.preventDefault();
+
+				const myLines = linesRef.current.filter(
+					(l) => l.uid === currentUser?.uid,
+				);
+				const myImages = imagesRef.current.filter(
+					(img) => img.uid === currentUser?.uid,
+				);
+
+				const allMyItems = [
+					...myLines.map((l) => ({ ...l, type: "line" })),
+					...myImages.map((img) => ({ ...img, type: "image" })),
+				].filter((item) => item.timestamp);
+
+				allMyItems.sort((a, b) => b.timestamp - a.timestamp);
+
+				if (allMyItems.length > 0) {
+					const lastItem = allMyItems[0];
+					if (lastItem.type === "line") {
+						remove(dbRef(database, `rooms/${roomId}/lines/${lastItem.id}`));
+					} else {
+						remove(dbRef(database, `rooms/${roomId}/images/${lastItem.id}`));
+					}
+				}
+			}
+		};
+
+		const handlePaste = async (e) => {
+			const clipboardData = e.clipboardData || window.clipboardData;
+			if (!clipboardData) return;
+
+			const items = clipboardData.items;
+			let hasImage = false;
+
+			for (let i = 0; i < items.length; i++) {
+				if (items[i].type.indexOf("image") !== -1) {
+					hasImage = true;
+					const blob = items[i].getAsFile();
+					if (!blob) continue;
+
+					const localUrl = URL.createObjectURL(blob);
+					const img = new window.Image();
+
+					img.onload = async () => {
+						try {
+							const fileRef = storageRef(
+								storage,
+								`rooms/${roomId}/uploads/paste_${Date.now()}.png`,
+							);
+							await uploadBytes(fileRef, blob);
+							const downloadUrl = await getDownloadURL(fileRef);
+
+							const config = stageConfigRef.current;
+							const x =
+								(-config.x + window.innerWidth / 2 - img.width / 2) /
+								config.scale;
+							const y =
+								(-config.y + window.innerHeight / 2 - img.height / 2) /
+								config.scale;
+
+							const imgDbRef = dbRef(database, `rooms/${roomId}/images`);
+							await push(imgDbRef, {
+								url: downloadUrl,
+								x,
+								y,
+								width: img.width,
+								height: img.height,
+								uid: currentUser?.uid,
+								timestamp: Date.now(),
+							});
+						} catch (error) {
+						} finally {
+							URL.revokeObjectURL(localUrl);
+						}
+					};
+					img.src = localUrl;
+				}
+			}
+
+			if (hasImage) {
+				e.preventDefault();
+			}
+		};
+
+		document.addEventListener("keydown", handleKeyDown);
+		document.addEventListener("paste", handlePaste);
+
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown);
+			document.removeEventListener("paste", handlePaste);
+		};
+	}, [roomId, currentUser]);
 
 	useEffect(() => {
 		const handleResize = () =>
@@ -182,77 +318,6 @@ const Room = () => {
 		};
 	}, [roomId, currentUser]);
 
-	const handleKeyDown = (e) => {
-		if ((e.ctrlKey || e.metaKey) && e.key === "z") {
-			e.preventDefault();
-			const myLines = linesRef.current.filter(
-				(l) => l.uid === currentUser?.uid,
-			);
-			if (myLines.length > 0) {
-				const lastLine = myLines[myLines.length - 1];
-				remove(dbRef(database, `rooms/${roomId}/lines/${lastLine.id}`));
-			}
-		}
-	};
-
-	const handlePaste = async (e) => {
-		const clipboardData = e.clipboardData || window.clipboardData;
-		if (!clipboardData) return;
-
-		const items = clipboardData.items;
-		let hasImage = false;
-
-		for (let i = 0; i < items.length; i++) {
-			if (items[i].type.indexOf("image") !== -1) {
-				hasImage = true;
-				const blob = items[i].getAsFile();
-				if (!blob) continue;
-
-				const localUrl = URL.createObjectURL(blob);
-				const img = new window.Image();
-
-				img.onload = async () => {
-					try {
-						const fileRef = storageRef(
-							storage,
-							`rooms/${roomId}/uploads/paste_${Date.now()}.png`,
-						);
-						await uploadBytes(fileRef, blob);
-						const downloadUrl = await getDownloadURL(fileRef);
-
-						const config = stageConfigRef.current;
-						const x =
-							(-config.x + window.innerWidth / 2 - img.width / 2) /
-							config.scale;
-						const y =
-							(-config.y + window.innerHeight / 2 - img.height / 2) /
-							config.scale;
-
-						const imagesRef = dbRef(database, `rooms/${roomId}/images`);
-						await push(imagesRef, {
-							url: downloadUrl,
-							x,
-							y,
-							width: img.width,
-							height: img.height,
-							uid: currentUser?.uid,
-						});
-					} catch (error) {
-						console.error("Błąd zapisu w Storage:", error);
-						alert("Firebase zablokował zapis. Sprawdź reguły Storage (F12).");
-					} finally {
-						URL.revokeObjectURL(localUrl);
-					}
-				};
-				img.src = localUrl;
-			}
-		}
-
-		if (hasImage) {
-			e.preventDefault();
-		}
-	};
-
 	const getLogicalPosition = (stage) => {
 		const pos = stage.getPointerPosition();
 		return {
@@ -284,9 +349,97 @@ const Room = () => {
 		});
 	};
 
+	const handleDragStart = (e, id) => {
+		let activeIds = selectedIds;
+		if (!activeIds.includes(id)) {
+			activeIds = [id];
+			setSelectedIds(activeIds);
+		}
+		const positions = {};
+		const stage = stageRef.current;
+		activeIds.forEach((selId) => {
+			const node = stage.findOne("#" + selId);
+			if (node) {
+				positions[selId] = { x: node.x(), y: node.y() };
+			}
+		});
+		dragStartPositions.current = positions;
+	};
+
+	const handleDragMove = (e, id) => {
+		const startPos = dragStartPositions.current[id];
+		if (!startPos) return;
+		const dx = e.target.x() - startPos.x;
+		const dy = e.target.y() - startPos.y;
+
+		const stage = stageRef.current;
+		selectedIds.forEach((selId) => {
+			if (selId !== id) {
+				const node = stage.findOne("#" + selId);
+				if (node && dragStartPositions.current[selId]) {
+					node.x(dragStartPositions.current[selId].x + dx);
+					node.y(dragStartPositions.current[selId].y + dy);
+				}
+			}
+		});
+	};
+
+	const handleDragEnd = (e, id) => {
+		const updates = {};
+		const stage = stageRef.current;
+		let activeIds = selectedIds;
+		if (!activeIds.includes(id)) activeIds = [id];
+
+		activeIds.forEach((selId) => {
+			const node = stage.findOne("#" + selId);
+			if (node) {
+				const isLine = linesRef.current.some((l) => l.id === selId);
+				const isImg = imagesRef.current.some((i) => i.id === selId);
+				if (isLine) {
+					updates[`lines/${selId}/x`] = node.x();
+					updates[`lines/${selId}/y`] = node.y();
+				} else if (isImg) {
+					updates[`images/${selId}/x`] = node.x();
+					updates[`images/${selId}/y`] = node.y();
+				}
+			}
+		});
+
+		if (Object.keys(updates).length > 0) {
+			update(dbRef(database, `rooms/${roomId}`), updates).catch(() => {});
+		}
+	};
+
 	const handleMouseDown = (e) => {
 		if (e.evt.button === 2 || e.evt.button === 1) {
 			setIsPanning(true);
+			return;
+		}
+
+		if (tool !== "select") {
+			setSelectedIds([]);
+		}
+
+		if (tool === "select") {
+			const clickedOnEmpty =
+				e.target === e.target.getStage() || e.target === bgRectRef.current;
+			if (clickedOnEmpty) {
+				const pos = getLogicalPosition(e.target.getStage());
+				setSelectionBox({
+					startX: pos.x,
+					startY: pos.y,
+					x: pos.x,
+					y: pos.y,
+					width: 0,
+					height: 0,
+				});
+				setSelectedIds([]);
+			} else {
+				const id = e.target.id();
+				if (id && !selectedIds.includes(id)) {
+					setSelectedIds([id]);
+				}
+			}
 			return;
 		}
 
@@ -330,7 +483,24 @@ const Room = () => {
 			return;
 		}
 
-		if (!isDrawing || tool === "eraser-object" || !currentLine) return;
+		if (tool === "select" && selectionBox) {
+			setSelectionBox((prev) => ({
+				...prev,
+				x: Math.min(prev.startX, logicalPos.x),
+				y: Math.min(prev.startY, logicalPos.y),
+				width: Math.abs(logicalPos.x - prev.startX),
+				height: Math.abs(logicalPos.y - prev.startY),
+			}));
+			return;
+		}
+
+		if (
+			!isDrawing ||
+			tool === "eraser-object" ||
+			tool === "select" ||
+			!currentLine
+		)
+			return;
 
 		setCurrentLine((prev) => ({
 			...prev,
@@ -343,12 +513,57 @@ const Room = () => {
 			setIsPanning(false);
 			return;
 		}
+
+		if (tool === "select" && selectionBox) {
+			const box = selectionBox;
+			const newSelected = [];
+
+			images.forEach((img) => {
+				if (
+					!(
+						img.x > box.x + box.width ||
+						img.x + img.width < box.x ||
+						img.y > box.y + box.height ||
+						img.y + img.height < box.y
+					)
+				) {
+					newSelected.push(img.id);
+				}
+			});
+
+			lines.forEach((line) => {
+				const lx = line.x || 0;
+				const ly = line.y || 0;
+				let hasPointInside = false;
+				for (let i = 0; i < line.points.length; i += 2) {
+					const px = line.points[i] + lx;
+					const py = line.points[i + 1] + ly;
+					if (
+						px >= box.x &&
+						px <= box.x + box.width &&
+						py >= box.y &&
+						py <= box.y + box.height
+					) {
+						hasPointInside = true;
+						break;
+					}
+				}
+				if (hasPointInside) newSelected.push(line.id);
+			});
+
+			setSelectedIds(newSelected);
+			setSelectionBox(null);
+			return;
+		}
+
 		setIsDrawing(false);
 		if (currentLine) {
 			const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
-			push(linesDbRef, { ...currentLine, uid: currentUser.uid }).catch(
-				() => {},
-			);
+			push(linesDbRef, {
+				...currentLine,
+				uid: currentUser.uid,
+				timestamp: Date.now(),
+			}).catch(() => {});
 			setCurrentLine(null);
 		}
 	};
@@ -393,9 +608,11 @@ const Room = () => {
 				maxY = -Infinity;
 
 			lines.forEach((line) => {
+				const offsetX = line.x || 0;
+				const offsetY = line.y || 0;
 				for (let i = 0; i < line.points.length; i += 2) {
-					const x = line.points[i];
-					const y = line.points[i + 1];
+					const x = line.points[i] + offsetX;
+					const y = line.points[i + 1] + offsetY;
 					if (x < minX) minX = x;
 					if (x > maxX) maxX = x;
 					if (y < minY) minY = y;
@@ -491,8 +708,6 @@ const Room = () => {
 			ref={containerRef}
 			className="room-container"
 			onContextMenu={handleContextMenu}
-			onKeyDown={handleKeyDown}
-			onPaste={handlePaste}
 			style={{ backgroundColor: bgTheme === "dark" ? "#0d1320" : "#f8fafc" }}
 			tabIndex={0}
 		>
@@ -508,6 +723,13 @@ const Room = () => {
 				</div>
 
 				<div className="toolbar-section">
+					<button
+						className={`tool-btn ${tool === "select" ? "active" : ""}`}
+						onClick={() => setTool("select")}
+						title="Przesuwaj wklejone obrazy i rysunki"
+					>
+						Wybierz
+					</button>
 					<button
 						className={`tool-btn ${tool === "pen" ? "active" : ""}`}
 						onClick={() => setTool("pen")}
@@ -547,7 +769,7 @@ const Room = () => {
 				</div>
 
 				<div
-					className={`toolbar-section ${tool === "eraser-object" ? "disabled-ui" : ""}`}
+					className={`toolbar-section ${tool === "eraser-object" || tool === "select" ? "disabled-ui" : ""}`}
 				>
 					<div className="thickness-picker">
 						<span className="tool-label">Grubość</span>
@@ -677,22 +899,39 @@ const Room = () => {
 						{images.map((img) => (
 							<URLImage
 								key={img.id}
+								id={img.id}
 								src={img.url}
 								x={img.x}
 								y={img.y}
 								width={img.width}
 								height={img.height}
+								isDraggable={tool === "select"}
+								onDragStart={handleDragStart}
+								onDragMove={handleDragMove}
+								onDragEnd={handleDragEnd}
+								isSelected={selectedIds.includes(img.id)}
 							/>
 						))}
 						{lines.map((line) => (
 							<Line
 								key={line.id}
+								id={line.id}
+								x={line.x || 0}
+								y={line.y || 0}
 								points={line.points || []}
 								stroke={line.color}
 								strokeWidth={line.thickness || 4}
 								tension={0.5}
 								lineCap="round"
 								lineJoin="round"
+								draggable={tool === "select"}
+								onDragStart={(e) => handleDragStart(e, line.id)}
+								onDragMove={(e) => handleDragMove(e, line.id)}
+								onDragEnd={(e) => handleDragEnd(e, line.id)}
+								shadowColor={
+									selectedIds.includes(line.id) ? "#00e5ff" : "transparent"
+								}
+								shadowBlur={selectedIds.includes(line.id) ? 10 : 0}
 								hitStrokeWidth={Math.max(line.thickness || 4, 15)}
 								globalCompositeOperation={
 									line.tool === "eraser-pixel"
@@ -706,8 +945,16 @@ const Room = () => {
 									}
 								}}
 								onMouseEnter={(e) => {
+									if (tool === "select") {
+										e.target.getStage().container().style.cursor = "move";
+									}
 									if (tool === "eraser-object" && e.evt.buttons === 1) {
 										eraseLine(line.id);
+									}
+								}}
+								onMouseLeave={(e) => {
+									if (tool === "select") {
+										e.target.getStage().container().style.cursor = "default";
 									}
 								}}
 							/>
@@ -726,6 +973,19 @@ const Room = () => {
 										? "destination-out"
 										: "source-over"
 								}
+							/>
+						)}
+
+						{selectionBox && (
+							<Rect
+								x={selectionBox.x}
+								y={selectionBox.y}
+								width={selectionBox.width}
+								height={selectionBox.height}
+								fill="rgba(0, 229, 255, 0.2)"
+								stroke="#00e5ff"
+								strokeWidth={1 / stageConfig.scale}
+								dash={[4 / stageConfig.scale, 4 / stageConfig.scale]}
 							/>
 						)}
 					</Layer>
