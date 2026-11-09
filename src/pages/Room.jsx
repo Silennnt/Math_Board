@@ -7,6 +7,7 @@ import {
 	Rect,
 	Image as KonvaImage,
 	Transformer,
+	Path,
 } from "react-konva";
 import {
 	ref as dbRef,
@@ -26,6 +27,35 @@ import {
 import { database, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import "./Room.css";
+const SHAPE_PATHS = {
+	square: "M0 0 H100 V100 H0 Z",
+	rectangle: "M0 25 H100 V75 H0 Z",
+	rhombus: "M50 0 L100 50 L50 100 L0 50 Z",
+	trapezoid: "M20 0 H80 L100 100 H0 Z",
+	trapezoidRight: "M0 0 H70 L100 100 H0 Z",
+	triangleRight: "M0 0 L0 100 L100 100 Z",
+	triangleEquilateral: "M50 0 L100 100 L0 100 Z",
+	hexagon: "M50 0 L100 25 L100 75 L50 100 L0 75 L0 25 Z",
+	circle: "M0,50 a50,50 0 1,0 100,0 a50,50 0 1,0 -100,0",
+	line: "M0 50 L100 50",
+	dashedLine: "M0 50 L100 50",
+
+	cube: "M0 30 L70 30 L70 100 L0 100 Z M0 30 L30 0 L100 0 L70 30 M100 0 L100 70 L70 100",
+	cuboid:
+		"M0 40 L70 40 L70 90 L0 90 Z M0 40 L30 10 L100 10 L70 40 M100 10 L100 60 L70 90",
+	prismTriangular:
+		"M30 0 L70 0 L50 30 Z M30 60 L70 60 L50 90 Z M30 0 L30 60 M70 0 L70 60 M50 30 L50 90",
+	prismHexagonal:
+		"M30 0 L70 0 L100 20 L70 40 L30 40 L0 20 Z M30 60 L70 60 L100 80 L70 100 L30 100 L0 80 Z M30 0 L30 60 M70 0 L70 60 M100 20 L100 80 M70 40 L70 100 M30 40 L30 100 M0 20 L0 80",
+	cylinder:
+		"M0 20 C0 0 100 0 100 20 C100 40 0 40 0 20 M0 20 L0 80 C0 100 100 100 100 80 L100 20",
+	cone: "M50 0 L0 80 C0 100 100 100 100 80 Z M0 80 C0 60 100 60 100 80",
+	pyramid: "M50 0 L0 80 L100 80 Z M50 0 L40 100 L100 80 M0 80 L40 100",
+	pyramidTriangular:
+		"M50 0 L20 70 L80 70 Z M50 0 L50 100 L80 70 M20 70 L50 100",
+	pyramidHexagonal:
+		"M30 70 L70 70 L100 85 L70 100 L30 100 L0 85 Z M50 0 L30 70 M50 0 L70 70 M50 0 L100 85 M50 0 L70 100 M50 0 L30 100 M50 0 L0 85",
+};
 
 const URLImage = ({
 	id,
@@ -111,6 +141,13 @@ const Room = () => {
 	const [sessionCreatedAt, setSessionCreatedAt] = useState(null);
 
 	const [tool, setTool] = useState("pen");
+	const [showShapeMenu, setShowShapeMenu] = useState(false);
+	const [shapeType, setShapeType] = useState("square");
+	useEffect(() => {
+		if (tool !== "shape") {
+			setShowShapeMenu(false);
+		}
+	}, [tool]);
 	const [color, setColor] = useState("#00e5ff");
 	const [thickness, setThickness] = useState(4);
 	const [bgTheme, setBgTheme] = useState("dark");
@@ -155,7 +192,36 @@ const Room = () => {
 		"#22c55e",
 		"#0d1320",
 	];
+	const handleColorClick = (newColor) => {
+		setColor(newColor);
+		if (selectedIds.length > 0) {
+			const updates = {};
+			selectedIds.forEach((id) => {
+				if (linesRef.current.some((l) => l.id === id)) {
+					updates[`lines/${id}/color`] = newColor;
+				}
+			});
+			if (Object.keys(updates).length > 0) {
+				update(dbRef(database, `rooms/${roomId}`), updates).catch(() => {});
+			}
+		}
+	};
 
+	const handleThicknessChange = (e) => {
+		const newThick = Number(e.target.value);
+		setThickness(newThick);
+		if (selectedIds.length > 0) {
+			const updates = {};
+			selectedIds.forEach((id) => {
+				if (linesRef.current.some((l) => l.id === id)) {
+					updates[`lines/${id}/thickness`] = newThick;
+				}
+			});
+			if (Object.keys(updates).length > 0) {
+				update(dbRef(database, `rooms/${roomId}`), updates).catch(() => {});
+			}
+		}
+	};
 	const gridPattern = useMemo(() => {
 		const canvas = document.createElement("canvas");
 		canvas.width = 50;
@@ -679,6 +745,24 @@ const Room = () => {
 
 		setIsDrawing(true);
 		const pos = getLogicalPosition(e.target.getStage());
+
+		if (tool === "shape") {
+			setCurrentLine({
+				tool: "shape",
+				shapeType: shapeType,
+				color: color,
+				thickness: thickness,
+				startX: pos.x,
+				startY: pos.y,
+				x: pos.x,
+				y: pos.y,
+				width: 0,
+				height: 0,
+			});
+			setShowShapeMenu(false);
+			return;
+		}
+
 		setCurrentLine({
 			tool,
 			color,
@@ -686,6 +770,7 @@ const Room = () => {
 			points: [pos.x, pos.y, pos.x, pos.y + 0.01],
 		});
 	};
+
 	const handleMouseMove = (e) => {
 		const stage = e.target.getStage();
 		const logicalPos = getLogicalPosition(stage);
@@ -749,6 +834,28 @@ const Room = () => {
 		)
 			return;
 
+		if (currentLine.tool === "shape") {
+			if (
+				currentLine.shapeType === "line" ||
+				currentLine.shapeType === "dashedLine"
+			) {
+				setCurrentLine((prev) => ({
+					...prev,
+					width: logicalPos.x - prev.startX,
+					height: logicalPos.y - prev.startY,
+				}));
+			} else {
+				setCurrentLine((prev) => ({
+					...prev,
+					x: Math.min(prev.startX, logicalPos.x),
+					y: Math.min(prev.startY, logicalPos.y),
+					width: Math.abs(logicalPos.x - prev.startX),
+					height: Math.abs(logicalPos.y - prev.startY),
+				}));
+			}
+			return;
+		}
+
 		setCurrentLine((prev) => {
 			const pts = prev.points;
 			if (pts.length >= 2) {
@@ -756,6 +863,7 @@ const Room = () => {
 				const lastY = pts[pts.length - 1];
 				const dx = logicalPos.x - lastX;
 				const dy = logicalPos.y - lastY;
+
 				const distSq = dx * dx + dy * dy;
 				const threshold = 12 / (stageConfig.scale * stageConfig.scale);
 
@@ -770,14 +878,13 @@ const Room = () => {
 			};
 		});
 	};
+
 	const handleMouseUp = () => {
 		if (isPanning) {
 			setIsPanning(false);
 
 			const now = Date.now();
-			if (now - velocity.current.time > 50) {
-				return;
-			}
+			if (now - velocity.current.time > 50) return;
 
 			let vx = velocity.current.x * 16.6;
 			let vy = velocity.current.y * 16.6;
@@ -836,6 +943,50 @@ const Room = () => {
 		}
 
 		setIsDrawing(false);
+
+		if (currentLine && currentLine.tool === "shape") {
+			let finalShape = {
+				...currentLine,
+				uid: currentUser.uid,
+				timestamp: Date.now(),
+				rotation: 0,
+			};
+
+			if (
+				finalShape.shapeType === "line" ||
+				finalShape.shapeType === "dashedLine"
+			) {
+				if (Math.abs(finalShape.width) < 5 && Math.abs(finalShape.height) < 5) {
+					finalShape.width = 100;
+					finalShape.height = 0;
+				}
+				finalShape.scaleX = 1;
+				finalShape.scaleY = 1;
+			} else {
+				if (Math.abs(finalShape.width) < 5 && Math.abs(finalShape.height) < 5) {
+					finalShape.x = currentLine.startX - 50;
+					finalShape.y = currentLine.startY - 50;
+					finalShape.scaleX = 1;
+					finalShape.scaleY = 1;
+				} else {
+					finalShape.scaleX = finalShape.width / 100;
+					finalShape.scaleY = finalShape.height / 100;
+				}
+				delete finalShape.width;
+				delete finalShape.height;
+			}
+
+			delete finalShape.startX;
+			delete finalShape.startY;
+
+			push(dbRef(database, `rooms/${roomId}/lines`), finalShape).catch(
+				() => {},
+			);
+			setCurrentLine(null);
+			setTool("select");
+			return;
+		}
+
 		if (currentLine) {
 			const linesDbRef = dbRef(database, `rooms/${roomId}/lines`);
 			push(linesDbRef, {
@@ -1100,6 +1251,24 @@ const Room = () => {
 						</svg>
 					</button>
 					<button
+						className={`tool-icon-btn ${tool === "shape" ? "active" : ""}`}
+						onClick={() => setShowShapeMenu(!showShapeMenu)}
+						title="Figury geometryczne 2D i 3D"
+					>
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+						</svg>
+					</button>
+					<button
 						className={`tool-icon-btn ${tool === "eraser-pixel" ? "active" : ""}`}
 						onClick={() => setTool("eraser-pixel")}
 						title="Gumka (Ślad)"
@@ -1142,7 +1311,7 @@ const Room = () => {
 				</div>
 
 				<div
-					className={`toolbar-section ${tool !== "pen" && tool !== "highlighter" ? "disabled-ui" : ""}`}
+					className={`toolbar-section ${tool !== "pen" && tool !== "highlighter" && tool !== "shape" && tool !== "select" ? "disabled-ui" : ""}`}
 				>
 					<div className="color-grid">
 						{colors.map((c) => (
@@ -1150,7 +1319,7 @@ const Room = () => {
 								key={c}
 								className={`color-swatch ${color === c ? "active" : ""}`}
 								style={{ backgroundColor: c }}
-								onClick={() => setColor(c)}
+								onClick={() => handleColorClick(c)}
 								title={c}
 							/>
 						))}
@@ -1158,7 +1327,7 @@ const Room = () => {
 				</div>
 
 				<div
-					className={`toolbar-section ${tool === "eraser-object" || tool === "select" ? "disabled-ui" : ""}`}
+					className={`toolbar-section ${tool === "eraser-object" || (tool === "select" && selectedIds.length === 0) ? "disabled-ui" : ""}`}
 				>
 					<div className="thickness-picker">
 						<span className="tool-label">Grubość</span>
@@ -1167,7 +1336,7 @@ const Room = () => {
 							min="2"
 							max="40"
 							value={thickness}
-							onChange={(e) => setThickness(Number(e.target.value))}
+							onChange={handleThicknessChange}
 							className="vertical-slider"
 						/>
 					</div>
@@ -1215,7 +1384,38 @@ const Room = () => {
 					</button>
 				</div>
 			</aside>
-
+			{showShapeMenu && (
+				<div className={`shapes-flyout-container theme-${bgTheme}`}>
+					<div className="shapes-panel-grid">
+						{Object.keys(SHAPE_PATHS).map((key) => (
+							<button
+								key={key}
+								className={`shape-select-btn ${shapeType === key && tool === "shape" ? "active" : ""}`}
+								onClick={() => {
+									setShapeType(key);
+									setTool("shape");
+								}}
+								title={key}
+							>
+								<svg
+									width="32"
+									height="32"
+									viewBox="0 0 100 100"
+									stroke="currentColor"
+									strokeWidth="6"
+									strokeLinejoin="round"
+									fill="none"
+								>
+									<path
+										d={SHAPE_PATHS[key]}
+										strokeDasharray={key === "dashedLine" ? "15,15" : "none"}
+									/>
+								</svg>
+							</button>
+						))}
+					</div>
+				</div>
+			)}
 			<div className={`canvas-wrapper ${isPanning ? "panning" : ""}`}>
 				<div className="remote-cursors-overlay">
 					{Object.entries(cursors).map(([uid, cursorData]) => {
@@ -1333,65 +1533,128 @@ const Room = () => {
 								isSelected={selectedIds.includes(img.id)}
 							/>
 						))}
-						{lines.map((line) => (
-							<Line
-								key={line.id}
-								id={line.id}
-								name="board-item"
-								x={line.x || 0}
-								y={line.y || 0}
-								scaleX={line.scaleX || 1}
-								scaleY={line.scaleY || 1}
-								rotation={line.rotation || 0}
-								points={line.points || []}
-								stroke={line.color}
-								strokeWidth={
+						{lines.map((line) => {
+							const commonProps = {
+								key: line.id,
+								id: line.id,
+								name: "board-item",
+								x: line.x || 0,
+								y: line.y || 0,
+								scaleX: line.scaleX || 1,
+								scaleY: line.scaleY || 1,
+								rotation: line.rotation || 0,
+								stroke: line.color,
+								strokeWidth:
 									line.tool === "highlighter"
 										? (line.thickness || 4) * 4
-										: line.thickness || 4
-								}
-								opacity={line.tool === "highlighter" ? 0.4 : 1}
-								tension={0.5}
-								lineCap="round"
-								lineJoin="round"
-								draggable={tool === "select"}
-								onDragStart={(e) => handleDragStart(e, line.id)}
-								onDragMove={(e) => handleDragMove(e, line.id)}
-								onDragEnd={(e) => handleDragEnd(e, line.id)}
-								onTransformEnd={(e) => handleTransformEnd(e, line.id)}
-								shadowColor={
-									selectedIds.includes(line.id) ? "#00e5ff" : "transparent"
-								}
-								shadowBlur={selectedIds.includes(line.id) ? 10 : 0}
-								hitStrokeWidth={Math.max(line.thickness || 4, 15)}
-								globalCompositeOperation={
-									line.tool === "eraser-pixel"
-										? "destination-out"
-										: "source-over"
-								}
-								onMouseDown={(e) => {
+										: line.thickness || 4,
+								opacity: line.tool === "highlighter" ? 0.4 : 1,
+								draggable: tool === "select",
+								onDragStart: (e) => handleDragStart(e, line.id),
+								onDragMove: (e) => handleDragMove(e, line.id),
+								onDragEnd: (e) => handleDragEnd(e, line.id),
+								onTransformEnd: (e) => handleTransformEnd(e, line.id),
+								shadowColor: selectedIds.includes(line.id)
+									? "#00e5ff"
+									: "transparent",
+								shadowBlur: selectedIds.includes(line.id) ? 10 : 0,
+								onMouseDown: (e) => {
 									if (tool === "eraser-object") {
 										e.cancelBubble = true;
 										eraseLine(line.id);
 									}
-								}}
-								onMouseEnter={(e) => {
-									if (tool === "select") {
+								},
+								onMouseEnter: (e) => {
+									if (tool === "select")
 										e.target.getStage().container().style.cursor = "move";
-									}
-									if (tool === "eraser-object" && e.evt.buttons === 1) {
+									if (tool === "eraser-object" && e.evt.buttons === 1)
 										eraseLine(line.id);
-									}
-								}}
-								onMouseLeave={(e) => {
-									if (tool === "select") {
+								},
+								onMouseLeave: (e) => {
+									if (tool === "select")
 										e.target.getStage().container().style.cursor = "default";
-									}
-								}}
-							/>
-						))}
+								},
+							};
 
-						{currentLine && (
+							if (line.tool === "shape") {
+								if (
+									line.shapeType === "line" ||
+									line.shapeType === "dashedLine"
+								) {
+									return (
+										<Line
+											{...commonProps}
+											points={[0, 0, line.width, line.height]}
+											dash={line.shapeType === "dashedLine" ? [25, 25] : []}
+											strokeScaleEnabled={false}
+											hitStrokeWidth={Math.max(line.thickness || 4, 15)}
+										/>
+									);
+								}
+
+								return (
+									<Path
+										{...commonProps}
+										data={SHAPE_PATHS[line.shapeType] || SHAPE_PATHS.square}
+										strokeScaleEnabled={false}
+										lineCap="round"
+										lineJoin="round"
+									/>
+								);
+							}
+
+							return (
+								<Line
+									{...commonProps}
+									points={line.points || []}
+									tension={0.5}
+									lineCap="round"
+									lineJoin="round"
+									hitStrokeWidth={Math.max(line.thickness || 4, 15)}
+									globalCompositeOperation={
+										line.tool === "eraser-pixel"
+											? "destination-out"
+											: "source-over"
+									}
+								/>
+							);
+						})}
+
+						{currentLine &&
+							currentLine.tool === "shape" &&
+							(currentLine.shapeType === "line" ||
+							currentLine.shapeType === "dashedLine" ? (
+								<Line
+									x={currentLine.x}
+									y={currentLine.y}
+									points={[0, 0, currentLine.width, currentLine.height]}
+									stroke={currentLine.color}
+									strokeWidth={currentLine.thickness}
+									dash={currentLine.shapeType === "dashedLine" ? [25, 25] : []}
+									lineCap="round"
+								/>
+							) : (
+								<Path
+									x={currentLine.x}
+									y={currentLine.y}
+									scaleX={
+										currentLine.width === 0 ? 0.01 : currentLine.width / 100
+									}
+									scaleY={
+										currentLine.height === 0 ? 0.01 : currentLine.height / 100
+									}
+									data={
+										SHAPE_PATHS[currentLine.shapeType] || SHAPE_PATHS.square
+									}
+									stroke={currentLine.color}
+									strokeWidth={currentLine.thickness}
+									strokeScaleEnabled={false}
+									lineCap="round"
+									lineJoin="round"
+								/>
+							))}
+
+						{currentLine && currentLine.tool !== "shape" && (
 							<Line
 								points={currentLine.points || []}
 								stroke={currentLine.color}
@@ -1411,7 +1674,6 @@ const Room = () => {
 								}
 							/>
 						)}
-
 						{selectionBox && (
 							<Rect
 								x={selectionBox.x}
