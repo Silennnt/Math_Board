@@ -865,7 +865,7 @@ const Room = () => {
 				const dy = logicalPos.y - lastY;
 
 				const distSq = dx * dx + dy * dy;
-				const threshold = 12 / (stageConfig.scale * stageConfig.scale);
+				const threshold = 49 / (stageConfig.scale * stageConfig.scale);
 
 				if (distSq < threshold) {
 					return prev;
@@ -1607,7 +1607,7 @@ const Room = () => {
 								<Line
 									{...commonProps}
 									points={line.points || []}
-									tension={0.5}
+									tension={0.7}
 									lineCap="round"
 									lineJoin="round"
 									hitStrokeWidth={Math.max(line.thickness || 4, 15)}
