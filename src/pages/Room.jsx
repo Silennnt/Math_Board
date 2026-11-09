@@ -1042,38 +1042,107 @@ const Room = () => {
 					</button>
 				</div>
 
-				<div className="toolbar-section">
+				<div className="toolbar-section tools-grid">
 					<button
-						className={`tool-btn ${tool === "select" ? "active" : ""}`}
+						className={`tool-icon-btn ${tool === "select" ? "active" : ""}`}
 						onClick={() => setTool("select")}
-						title="Przesuwaj wklejone obrazy i rysunki"
+						title="Wybierz i przesuwaj"
 					>
-						Wybierz
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z" />
+						</svg>
 					</button>
 					<button
-						className={`tool-btn ${tool === "pen" ? "active" : ""}`}
+						className={`tool-icon-btn ${tool === "pen" ? "active" : ""}`}
 						onClick={() => setTool("pen")}
+						title="Ołówek"
 					>
-						Rysuj
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M12 20h9" />
+							<path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+						</svg>
 					</button>
 					<button
-						className={`tool-btn ${tool === "eraser-pixel" ? "active" : ""}`}
+						className={`tool-icon-btn ${tool === "highlighter" ? "active" : ""}`}
+						onClick={() => setTool("highlighter")}
+						title="Flamaster (Podkreślacz)"
+					>
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M9 11l-6 6v3h9l3-3" />
+							<path d="M22 12l-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4" />
+						</svg>
+					</button>
+					<button
+						className={`tool-icon-btn ${tool === "eraser-pixel" ? "active" : ""}`}
 						onClick={() => setTool("eraser-pixel")}
-						title="Usuwaj pociągnięciami"
+						title="Gumka (Ślad)"
 					>
-						Gumka ślad
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M20 20H7L3 16c-.5-.5-.5-1.5 0-2l10-10c.5-.5 1.5-.5 2 0l5 5c.5.5.5 1.5 0 2L11 20" />
+							<path d="M16 15l-6 6" />
+						</svg>
 					</button>
 					<button
-						className={`tool-btn ${tool === "eraser-object" ? "active" : ""}`}
+						className={`tool-icon-btn ${tool === "eraser-object" ? "active" : ""}`}
 						onClick={() => setTool("eraser-object")}
-						title="Usuwa całe elementy"
+						title="Gumka (Cały Obiekt)"
 					>
-						Gumka obiekt
+						<svg
+							width="22"
+							height="22"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							strokeWidth="2"
+							strokeLinecap="round"
+							strokeLinejoin="round"
+						>
+							<path d="M3 6h18" />
+							<path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+							<line x1="10" y1="11" x2="10" y2="17" />
+							<line x1="14" y1="11" x2="14" y2="17" />
+						</svg>
 					</button>
 				</div>
 
 				<div
-					className={`toolbar-section ${tool !== "pen" ? "disabled-ui" : ""}`}
+					className={`toolbar-section ${tool !== "pen" && tool !== "highlighter" ? "disabled-ui" : ""}`}
 				>
 					<div className="color-grid">
 						{colors.map((c) => (
@@ -1276,7 +1345,12 @@ const Room = () => {
 								rotation={line.rotation || 0}
 								points={line.points || []}
 								stroke={line.color}
-								strokeWidth={line.thickness || 4}
+								strokeWidth={
+									line.tool === "highlighter"
+										? (line.thickness || 4) * 4
+										: line.thickness || 4
+								}
+								opacity={line.tool === "highlighter" ? 0.4 : 1}
 								tension={0.5}
 								lineCap="round"
 								lineJoin="round"
@@ -1321,7 +1395,12 @@ const Room = () => {
 							<Line
 								points={currentLine.points || []}
 								stroke={currentLine.color}
-								strokeWidth={currentLine.thickness || 4}
+								strokeWidth={
+									currentLine.tool === "highlighter"
+										? (currentLine.thickness || 4) * 4
+										: currentLine.thickness || 4
+								}
+								opacity={currentLine.tool === "highlighter" ? 0.4 : 1}
 								tension={0.5}
 								lineCap="round"
 								lineJoin="round"

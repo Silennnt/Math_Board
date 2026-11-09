@@ -417,3 +417,54 @@
 .context-menu.theme-light .context-menu-empty {
 	color: #64748b;
 }
+.tools-grid {
+	display: grid;
+	grid-template-columns: repeat(2, 1fr);
+	gap: 8px;
+	width: 100%;
+}
+
+.tools-grid .tool-icon-btn:first-child {
+	grid-column: 1 / -1;
+}
+
+.tool-icon-btn {
+	background: rgba(255, 255, 255, 0.04);
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: var(--r2);
+	color: var(--text-muted, #94a3b8);
+	cursor: pointer;
+	padding: 10px 0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: all 0.2s ease;
+}
+
+.tool-icon-btn:hover {
+	background: rgba(255, 255, 255, 0.1);
+	color: var(--text-color, #f8fafc);
+}
+
+.tool-icon-btn.active {
+	background: rgba(0, 229, 255, 0.15);
+	border-color: var(--cyan);
+	color: var(--cyan);
+}
+
+.theme-light .tool-icon-btn {
+	background: #ffffff;
+	border-color: rgba(0, 0, 0, 0.1);
+	color: #64748b;
+}
+
+.theme-light .tool-icon-btn:hover {
+	background: #f1f5f9;
+	color: #0f172a;
+}
+
+.theme-light .tool-icon-btn.active {
+	background: #e0f2fe;
+	border-color: #0ea5e9;
+	color: #0ea5e9;
+}
