@@ -871,7 +871,8 @@ const Room = () => {
 					return prev;
 				}
 			}
-
+			const optimizedX = Math.round(logicalPos.x * 10) / 10;
+			const optimizedY = Math.round(logicalPos.y * 10) / 10;
 			return {
 				...prev,
 				points: pts.concat([logicalPos.x, logicalPos.y]),
