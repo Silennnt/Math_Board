@@ -64,14 +64,14 @@ const Register = () => {
 
 					<form onSubmit={handleRegister} className="login-form">
 						<div className="input-group">
-							<label htmlFor="name">Imię</label>
+							<label htmlFor="name">Jak się nazywasz?</label>
 							<input
 								type="text"
 								id="name"
 								value={name}
 								onChange={(e) => setName(e.target.value)}
 								required
-								placeholder="Wpisz swoje imię"
+								placeholder="Wpisz swoje imię i nazwisko"
 							/>
 						</div>
 

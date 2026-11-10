@@ -22,7 +22,6 @@ const Dashboard = () => {
 	const [zoomScale, setZoomScale] = useState(1);
 
 	const [activeTab, setActiveTab] = useState("gallery");
-	// Nowy stan do przełączania pod-zakładek w tabeli zarządzania (Oczekujący / Zatwierdzeni)
 	const [managementFilter, setManagementFilter] = useState("pending");
 
 	const isTutor = currentUser?.email === TUTOR_EMAIL;
@@ -238,14 +237,12 @@ const Dashboard = () => {
 	};
 
 	const renderManagementTable = () => {
-		// Filtrowanie uczniów w zależności od wybranej zakładki
 		const filteredStudents = students.filter((s) =>
 			managementFilter === "pending" ? !s.isApproved : s.isApproved,
 		);
 
 		return (
 			<div className="management-container">
-				{/* Pod-zakładki nad tabelą */}
 				<div
 					className="management-tabs"
 					style={{ display: "flex", gap: "10px", marginBottom: "20px" }}
@@ -393,7 +390,7 @@ const Dashboard = () => {
 															className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
 															onClick={() => setSelectedStudent(student)}
 														>
-															{student.email}
+															{student.name || student.email}
 														</li>
 													))}
 											</ul>
@@ -440,7 +437,7 @@ const Dashboard = () => {
 												<h1
 													style={{ fontSize: "1.8rem", marginBottom: "10px" }}
 												>
-													{selectedStudent.email}
+													{selectedStudent.name || selectedStudent.email}
 												</h1>
 												<p style={{ marginBottom: "20px" }}>
 													Przeglądaj historię lekcji lub dołącz do aktywnej
