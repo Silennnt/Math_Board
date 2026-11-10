@@ -290,6 +290,26 @@ const Room = () => {
 	}, []);
 
 	useEffect(() => {
+		if (stageRef.current) {
+			const container = stageRef.current.container();
+
+			const penCursor = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="%230d1320" stroke="%2300e5ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/><path d="m15 5 4 4"/></svg>') 2 22, crosshair`;
+
+			const eraserCursor = `url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="%230d1320" stroke="%23ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 21-4.3-4.3c-1-1-1-2.5 0-3.4l9.6-9.6c1-1 2.5-1 3.4 0l5.6 5.6c1 1 1 2.5 0 3.4L13 21"/><path d="M22 21H7"/><path d="m5 11 9 9"/></svg>') 3 19, crosshair`;
+
+			if (tool === "select") {
+				container.style.cursor = "default";
+			} else if (tool === "pen" || tool === "highlighter") {
+				container.style.cursor = penCursor;
+			} else if (tool === "eraser-pixel" || tool === "eraser-object") {
+				container.style.cursor = eraserCursor;
+			} else {
+				container.style.cursor = "crosshair";
+			}
+		}
+	}, [tool]);
+
+	useEffect(() => {
 		if (tool === "select" && transformerRef.current) {
 			const stage = stageRef.current;
 			const nodes = selectedIds
