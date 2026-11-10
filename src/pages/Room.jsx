@@ -192,6 +192,25 @@ const Room = () => {
 		"#22c55e",
 		"#0d1320",
 	];
+
+	const myNameRef = useRef(
+		currentUser?.displayName || currentUser?.email?.split("@")[0] || "Uczeń",
+	);
+
+	useEffect(() => {
+		if (!currentUser) return;
+		const userProfileRef = dbRef(database, `users/${currentUser.uid}`);
+		const unsubscribe = onValue(userProfileRef, (snapshot) => {
+			if (snapshot.exists()) {
+				const data = snapshot.val();
+				if (data.name) {
+					myNameRef.current = data.name;
+				}
+			}
+		});
+		return () => unsubscribe();
+	}, [currentUser]);
+
 	const handleColorClick = (newColor) => {
 		setColor(newColor);
 		if (selectedIds.length > 0) {
@@ -784,7 +803,7 @@ const Room = () => {
 			set(myCursorRef, {
 				x: logicalPos.x,
 				y: logicalPos.y,
-				name: currentUser.displayName || currentUser.email.split("@")[0],
+				name: myNameRef.current,
 			}).catch(() => {});
 			lastCursorUpdate.current = now;
 		}

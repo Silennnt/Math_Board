@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { signInWithEmailAndPassword, signOut } from "firebase/auth";
-import { ref, get } from "firebase/database";
+import { ref, get, set, update } from "firebase/database";
 import { auth, database } from "../firebase";
 import MathBackground from "../components/MathBackground";
 import "./Login.css";
@@ -27,6 +27,20 @@ const Login = () => {
 			const user = userCredential.user;
 
 			if (user.email === "dawidchrzaszcz64@gmail.com") {
+				const adminRef = ref(database, `users/${user.uid}`);
+				const adminSnap = await get(adminRef);
+
+				if (!adminSnap.exists()) {
+					await set(adminRef, {
+						email: user.email,
+						name: "Dawid Chrząszcz",
+						role: "tutor",
+						isApproved: true,
+						createdAt: new Date().toISOString(),
+					});
+				} else {
+					await update(adminRef, { name: "Dawid Chrząszcz" });
+				}
 				navigate("/dashboard");
 				return;
 			}
