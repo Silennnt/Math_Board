@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { signInWithEmailAndPassword } from "firebase/auth";
-import { auth } from "../firebase";
+import { useNavigate, Link } from "react-router-dom";
+import { signInWithEmailAndPassword, signOut } from "firebase/auth";
+import { ref, get } from "firebase/database";
+import { auth, database } from "../firebase";
 import MathBackground from "../components/MathBackground";
-import { Link } from "react-router-dom";
 import "./Login.css";
 
 const Login = () => {
@@ -11,17 +11,61 @@ const Login = () => {
 	const [email, setEmail] = useState("");
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState("");
+	const [isLoading, setIsLoading] = useState(false);
 
 	const handleLogin = async (e) => {
 		e.preventDefault();
 		setError("");
+		setIsLoading(true);
 
 		try {
-			await signInWithEmailAndPassword(auth, email, password);
-			navigate("/dashboard");
+			const userCredential = await signInWithEmailAndPassword(
+				auth,
+				email,
+				password,
+			);
+			const user = userCredential.user;
+
+			if (user.email === "dawidchrzaszcz64@gmail.com") {
+				navigate("/dashboard");
+				return;
+			}
+
+			const userRef = ref(database, `users/${user.uid}`);
+			const snapshot = await get(userRef);
+
+			if (snapshot.exists()) {
+				const userData = snapshot.val();
+
+				if (userData.isApproved === true) {
+					navigate("/dashboard");
+				} else {
+					await signOut(auth);
+					setError("Twoje konto oczekuje na zatwierdzenie przez nauczyciela.");
+				}
+			} else {
+				await signOut(auth);
+				setError(
+					"Nie znaleziono pełnego profilu. Skontaktuj się z nauczycielem.",
+				);
+			}
 		} catch (err) {
-			setError("Nieprawidłowy adres e-mail lub hasło.");
-			console.error(err);
+			console.error("Szczegóły błędu:", err);
+
+			if (
+				err.code === "auth/invalid-credential" ||
+				err.code === "auth/user-not-found" ||
+				err.code === "auth/wrong-password"
+			) {
+				setError("Nieprawidłowy adres e-mail lub hasło.");
+			} else if (err.message && err.message.includes("Permission denied")) {
+				await signOut(auth);
+				setError("Twoje konto oczekuje na zatwierdzenie.");
+			} else {
+				setError(`Wystąpił błąd: ${err.message}`);
+			}
+		} finally {
+			setIsLoading(false);
 		}
 	};
 
@@ -58,8 +102,8 @@ const Login = () => {
 								placeholder="••••••••"
 							/>
 						</div>
-						<button type="submit" className="login-btn">
-							Zaloguj się
+						<button type="submit" disabled={isLoading} className="login-btn">
+							{isLoading ? "Logowanie..." : "Zaloguj się"}
 						</button>
 						<p
 							className="auth-switch"
