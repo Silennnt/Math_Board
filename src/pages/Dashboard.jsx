@@ -1,7 +1,14 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { ref as dbRef, onValue, set, remove, update } from "firebase/database";
+import {
+	ref as dbRef,
+	onValue,
+	set,
+	remove,
+	update,
+	push,
+} from "firebase/database";
 import { ref as storageRef, deleteObject } from "firebase/storage";
 import { auth, database, storage } from "../firebase";
 import MathBackground from "../components/MathBackground";
@@ -25,6 +32,10 @@ const Dashboard = () => {
 	const [activeTab, setActiveTab] = useState("gallery");
 	const [managementFilter, setManagementFilter] = useState("pending");
 
+	const [groups, setGroups] = useState([]);
+	const [selectedForGroup, setSelectedForGroup] = useState([]);
+	const [groupName, setGroupName] = useState("");
+	const [activeStudentGallery, setActiveStudentGallery] = useState(null);
 	const isTutor = currentUser?.email === TUTOR_EMAIL;
 
 	useEffect(() => {
@@ -35,23 +46,48 @@ const Dashboard = () => {
 	}, [currentUser, isTutor]);
 
 	useEffect(() => {
-		if (currentUser && isTutor) {
-			const usersRef = dbRef(database, "users");
-			const unsubscribe = onValue(usersRef, (snapshot) => {
+		if (!currentUser) return;
+		const groupsRef = dbRef(database, "groups");
+		const unsubscribe = onValue(groupsRef, (snapshot) => {
+			if (snapshot.exists()) {
 				const data = snapshot.val();
-				if (data) {
-					const studentsList = Object.entries(data)
-						.map(([uid, user]) => ({ uid, ...user }))
-						.filter((user) => user.role === "student" || !user.role);
+				setGroups(Object.keys(data).map((key) => ({ id: key, ...data[key] })));
+			} else {
+				setGroups([]);
+			}
+		});
+		return () => unsubscribe();
+	}, [currentUser]);
 
-					setStudents(studentsList);
-				} else {
-					setStudents([]);
-				}
-			});
-			return () => unsubscribe();
+	useEffect(() => {
+		if (!currentUser) return;
+		let targetUid = null;
+		if (isTutor && selectedStudent) {
+			targetUid = selectedStudent.uid;
+		} else if (!isTutor) {
+			targetUid = activeStudentGallery || currentUser.uid;
 		}
-	}, [currentUser, isTutor]);
+
+		if (!targetUid) {
+			setScreenshots([]);
+			return;
+		}
+
+		const screenshotsDbRef = dbRef(database, `rooms/${targetUid}/screenshots`);
+		const unsubscribe = onValue(screenshotsDbRef, (snapshot) => {
+			const data = snapshot.val();
+			if (data) {
+				const loadedScreenshots = Object.keys(data)
+					.map((key) => ({ id: key, ...data[key] }))
+					.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+				setScreenshots(loadedScreenshots);
+			} else {
+				setScreenshots([]);
+			}
+		});
+
+		return () => unsubscribe();
+	}, [currentUser, isTutor, selectedStudent, activeStudentGallery]);
 
 	useEffect(() => {
 		if (!currentUser) return;
@@ -121,11 +157,12 @@ const Dashboard = () => {
 					icon: "success",
 					title: "Konto usunięte",
 					showConfirmButton: false,
-					timer: 3000,
+					timer: 4000,
 				});
 			}
 		});
 	};
+
 	const handleDeleteLesson = async (shotId, shotUrl) => {
 		Swal.fire({
 			title: "Usuwanie zrzutu",
@@ -154,7 +191,7 @@ const Dashboard = () => {
 						icon: "success",
 						title: "Usunięto zrzut",
 						showConfirmButton: false,
-						timer: 3000,
+						timer: 4000,
 					});
 				} catch (error) {
 					console.error("Błąd podczas usuwania lekcji:", error);
@@ -400,6 +437,15 @@ const Dashboard = () => {
 									>
 										🖼️ Galerie zrzutów
 									</button>
+									<button
+										className={`student-item ${activeTab === "groups" ? "active" : ""}`}
+										onClick={() => {
+											setActiveTab("groups");
+											setSelectedStudent(null);
+										}}
+									>
+										🏫 Zarządzaj Grupami
+									</button>
 								</div>
 
 								{activeTab === "gallery" && (
@@ -408,28 +454,58 @@ const Dashboard = () => {
 											className="section-title"
 											style={{ fontSize: "1.2rem", marginTop: "20px" }}
 										>
-											Wybierz ucznia
+											Wybierz ucznia / grupę
 										</h2>
-										{students.length > 0 ? (
-											<ul className="student-list">
-												{students
-													.filter((s) => s.isApproved)
-													.map((student) => (
-														<li
-															key={student.uid}
-															className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
-															onClick={() => setSelectedStudent(student)}
-														>
-															{student.name || student.email}
-														</li>
-													))}
-											</ul>
-										) : (
+										<ul className="student-list">
+											{students
+												.filter((s) => s.isApproved)
+												.map((student) => (
+													<li
+														key={student.uid}
+														className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
+														onClick={() => setSelectedStudent(student)}
+													>
+														👤 {student.name || student.email}
+													</li>
+												))}
+
+											{groups.length > 0 && (
+												<div
+													style={{
+														color: "var(--muted)",
+														fontSize: "0.8rem",
+														marginTop: "15px",
+														marginBottom: "5px",
+														textTransform: "uppercase",
+														letterSpacing: "1px",
+													}}
+												>
+													Grupy Zespołowe
+												</div>
+											)}
+											{groups.map((group) => (
+												<li
+													key={group.id}
+													className={`student-item ${selectedStudent?.uid === group.id ? "active" : ""}`}
+													onClick={() =>
+														setSelectedStudent({
+															uid: group.id,
+															name: group.name,
+															email: "Katalog grupowy",
+															isGroup: true,
+														})
+													}
+												>
+													🏫 {group.name}
+												</li>
+											))}
+										</ul>
+										{students.length === 0 && groups.length === 0 && (
 											<p
 												className="gallery-placeholder"
 												style={{ padding: "20px", border: "none" }}
 											>
-												Brak zatwierdzonych uczniów.
+												Brak uczniów i grup.
 											</p>
 										)}
 									</>
@@ -437,6 +513,7 @@ const Dashboard = () => {
 							</aside>
 
 							<section className="student-details-container">
+								{/* ZAKŁADKA 1: ZARZĄDZANIE UCZNIAMI */}
 								{activeTab === "manage" && (
 									<section
 										className="dashboard-card users-card"
@@ -457,6 +534,147 @@ const Dashboard = () => {
 									</section>
 								)}
 
+								{/* ZAKŁADKA 2: ZARZĄDZANIE GRUPAMI (KREATOR GRUP) */}
+								{activeTab === "groups" && (
+									<section
+										className="dashboard-card users-card"
+										style={{
+											background: "var(--glass-bg)",
+											padding: "30px",
+											borderRadius: "var(--r2)",
+											border: "1px solid var(--glass-brd)",
+										}}
+									>
+										<h2 className="section-title">Kreator Grup</h2>
+										<p
+											style={{
+												color: "var(--muted)",
+												marginBottom: "20px",
+											}}
+										>
+											Utwórz wspólną tablicę. Uczniowie w tej grupie zobaczą
+											przycisk dołączenia, a ich zrzuty wpadną do jednego,
+											wspólnego folderu.
+										</p>
+
+										<input
+											type="text"
+											placeholder="Nazwa grupy (np. Klasa 8a - Wtorek 16:00)"
+											value={groupName}
+											onChange={(e) => setGroupName(e.target.value)}
+											style={{
+												width: "100%",
+												padding: "15px",
+												borderRadius: "12px",
+												background: "rgba(0,0,0,0.2)",
+												border: "1px solid var(--glass-brd)",
+												color: "#fff",
+												fontSize: "1rem",
+												marginBottom: "15px",
+												outline: "none",
+											}}
+										/>
+
+										<div
+											className="student-list"
+											style={{
+												marginBottom: "20px",
+												background: "rgba(0,0,0,0.2)",
+												padding: "15px",
+												borderRadius: "12px",
+												maxHeight: "200px",
+												overflowY: "auto",
+											}}
+										>
+											{students
+												.filter((s) => s.isApproved)
+												.map((student) => (
+													<label
+														key={student.uid}
+														className="student-item"
+														style={{
+															display: "flex",
+															alignItems: "center",
+															gap: "15px",
+															cursor: "pointer",
+															border: "none",
+															background: "transparent",
+														}}
+													>
+														<input
+															type="checkbox"
+															style={{
+																width: "18px",
+																height: "18px",
+																accentColor: "var(--cyan)",
+															}}
+															checked={selectedForGroup.includes(student.uid)}
+															onChange={(e) => {
+																if (e.target.checked)
+																	setSelectedForGroup((prev) => [
+																		...prev,
+																		student.uid,
+																	]);
+																else
+																	setSelectedForGroup((prev) =>
+																		prev.filter((id) => id !== student.uid),
+																	);
+															}}
+														/>
+														<span style={{ fontSize: "1rem", color: "#fff" }}>
+															{student.name || student.email}
+														</span>
+													</label>
+												))}
+										</div>
+
+										<button
+											onClick={async () => {
+												if (
+													!groupName.trim() ||
+													selectedForGroup.length === 0
+												) {
+													Swal.fire({
+														toast: true,
+														position: "top-end",
+														icon: "warning",
+														title: "Podaj nazwę i wybierz uczniów.",
+														showConfirmButton: false,
+														timer: 4000,
+													});
+													return;
+												}
+												const newGroupId = push(dbRef(database, "dummy")).key;
+												const participants = {};
+												selectedForGroup.forEach(
+													(uid) => (participants[uid] = true),
+												);
+
+												await set(dbRef(database, `groups/${newGroupId}`), {
+													name: groupName,
+													participants,
+												});
+
+												setGroupName("");
+												setSelectedForGroup([]);
+												Swal.fire({
+													toast: true,
+													position: "top-end",
+													icon: "success",
+													title: "Grupa utworzona!",
+													showConfirmButton: false,
+													timer: 4000,
+												});
+											}}
+											className="btn-join-room"
+											style={{ width: "100%" }}
+										>
+											Utwórz i przypisz grupę
+										</button>
+									</section>
+								)}
+
+								{/* ZAKŁADKA 3: GALERIA */}
 								{activeTab === "gallery" &&
 									(selectedStudent ? (
 										<>
@@ -471,7 +689,8 @@ const Dashboard = () => {
 												</h1>
 												<p style={{ marginBottom: "20px" }}>
 													Przeglądaj historię lekcji lub dołącz do aktywnej
-													tablicy ucznia.
+													tablicy {selectedStudent.isGroup ? "grupy" : "ucznia"}
+													.
 												</p>
 												<button
 													onClick={() =>
@@ -479,7 +698,7 @@ const Dashboard = () => {
 													}
 													className="btn-join-room"
 												>
-													Rozpocznij lekcję z tym uczniem
+													Rozpocznij lekcję
 												</button>
 											</div>
 
@@ -490,10 +709,10 @@ const Dashboard = () => {
 										</>
 									) : (
 										<div className="welcome-section">
-											<h1>Galerie uczniów</h1>
+											<h1>Galerie uczniów i grup</h1>
 											<p>
-												Wybierz ucznia z listy po lewej stronie, aby wyświetlić
-												jego zrzuty ekranu i dołączyć do pokoju.
+												Wybierz ucznia lub grupę z listy po lewej stronie, aby
+												wyświetlić zrzuty ekranu i dołączyć do pokoju.
 											</p>
 										</div>
 									))}
@@ -503,20 +722,80 @@ const Dashboard = () => {
 						<>
 							<section className="welcome-section">
 								<h1>Panel Ucznia</h1>
-								<p>
-									Witaj w wirtualnej przestrzeni do nauki matematyki. Twoja
-									tablica jest gotowa.
+								<p style={{ marginBottom: "30px" }}>
+									Witaj w wirtualnej przestrzeni do nauki matematyki.
 								</p>
-								<button
-									onClick={() => navigate(`/room/${currentUser.uid}`)}
-									className="btn-join-room"
+
+								<div
+									style={{
+										display: "flex",
+										gap: "20px",
+										justifyContent: "center",
+										flexWrap: "wrap",
+									}}
 								>
-									Dołącz do aktywnej lekcji
-								</button>
+									<button
+										onClick={() => navigate(`/room/${currentUser.uid}`)}
+										className="btn-join-room"
+									>
+										👤 Moja Tablica Prywatna
+									</button>
+
+									{groups
+										.filter(
+											(g) => g.participants && g.participants[currentUser.uid],
+										)
+										.map((group) => (
+											<button
+												key={group.id}
+												onClick={() => navigate(`/room/${group.id}`)}
+												className="btn-join-room"
+												style={{
+													background:
+														"linear-gradient(90deg, #ef4444, #f97316)",
+													boxShadow: "0 5px 25px rgba(239, 68, 68, 0.4)",
+												}}
+											>
+												🏫 Grupa: {group.name}
+											</button>
+										))}
+								</div>
 							</section>
 
 							<section className="history-section">
 								<h2 className="section-title">Historia zajęć</h2>
+
+								{/* Zakładki do przełączania się między galerią prywatną a grupową */}
+								<div
+									className="management-tabs"
+									style={{
+										display: "flex",
+										gap: "10px",
+										marginBottom: "20px",
+										flexWrap: "wrap",
+									}}
+								>
+									<button
+										className={`btn-filter ${!activeStudentGallery || activeStudentGallery === currentUser.uid ? "active" : ""}`}
+										onClick={() => setActiveStudentGallery(currentUser.uid)}
+									>
+										👤 Moje Prywatne
+									</button>
+									{groups
+										.filter(
+											(g) => g.participants && g.participants[currentUser.uid],
+										)
+										.map((group) => (
+											<button
+												key={group.id}
+												className={`btn-filter ${activeStudentGallery === group.id ? "active" : ""}`}
+												onClick={() => setActiveStudentGallery(group.id)}
+											>
+												🏫 {group.name}
+											</button>
+										))}
+								</div>
+
 								{renderGallery()}
 							</section>
 						</>
