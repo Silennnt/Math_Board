@@ -550,19 +550,20 @@
 	filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
 	transform-origin: top left;
 }
-
 .remote-cursor-label {
-	padding: 6px 12px;
+	padding: 4px 12px;
 	border-radius: 12px;
 	font-size: 0.75rem;
-	font-weight: 600;
+	font-weight: 700;
 	font-family: var(--font-sans, system-ui, sans-serif);
 	letter-spacing: 0.3px;
-	margin-top: 2px;
+	margin-top: 4px;
 	margin-left: 14px;
-	backdrop-filter: blur(8px);
-	-webkit-backdrop-filter: blur(8px);
+	border: 1.5px solid;
+	box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 	white-space: nowrap;
+	backdrop-filter: blur(4px);
+	-webkit-backdrop-filter: blur(4px);
 }
 
 .label-theme-dark {

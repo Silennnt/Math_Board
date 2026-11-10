@@ -784,7 +784,7 @@ const Room = () => {
 			set(myCursorRef, {
 				x: logicalPos.x,
 				y: logicalPos.y,
-				email: currentUser.email,
+				name: currentUser.displayName || currentUser.email.split("@")[0],
 			}).catch(() => {});
 			lastCursorUpdate.current = now;
 		}
@@ -1424,6 +1424,48 @@ const Room = () => {
 						const screenX = cursorData.x * stageConfig.scale + stageConfig.x;
 						const screenY = cursorData.y * stageConfig.scale + stageConfig.y;
 
+						const getCursorColor = (userId) => {
+							const palettes = [
+								{
+									bg: "#e0f2fe",
+									border: "#0284c7",
+									text: "#0369a1",
+									cursor: "#0ea5e9",
+								},
+								{
+									bg: "#fce7f3",
+									border: "#db2777",
+									text: "#be185d",
+									cursor: "#ec4899",
+								},
+								{
+									bg: "#dcfce7",
+									border: "#16a34a",
+									text: "#15803d",
+									cursor: "#22c55e",
+								},
+								{
+									bg: "#fef3c7",
+									border: "#d97706",
+									text: "#b45309",
+									cursor: "#f59e0b",
+								},
+								{
+									bg: "#f3e8ff",
+									border: "#9333ea",
+									text: "#7e22ce",
+									cursor: "#a855f7",
+								},
+							];
+							let hash = 0;
+							for (let i = 0; i < userId.length; i++) {
+								hash = userId.charCodeAt(i) + ((hash << 5) - hash);
+							}
+							return palettes[Math.abs(hash) % palettes.length];
+						};
+
+						const palette = getCursorColor(uid);
+
 						return (
 							<div
 								key={uid}
@@ -1431,21 +1473,28 @@ const Room = () => {
 								style={{ transform: `translate(${screenX}px, ${screenY}px)` }}
 							>
 								<svg
-									width="26"
-									height="26"
+									width="24"
+									height="24"
 									viewBox="0 0 24 24"
-									fill={bgTheme === "dark" ? "#00e5ff" : "#3b82f6"}
+									fill={palette.cursor}
 									xmlns="http://www.w3.org/2000/svg"
 								>
 									<path
 										d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 0 1 .35-.15h6.42c.45 0 .67-.54.35-.85L5.5 3.21z"
-										stroke="white"
+										stroke="#ffffff"
 										strokeWidth="1.5"
 										strokeLinejoin="round"
 									/>
 								</svg>
-								<div className={`remote-cursor-label label-theme-${bgTheme}`}>
-									{cursorData.email}
+								<div
+									className="remote-cursor-label"
+									style={{
+										backgroundColor: palette.bg,
+										borderColor: palette.border,
+										color: palette.text,
+									}}
+								>
+									{cursorData.name || "Uczeń"}
 								</div>
 							</div>
 						);

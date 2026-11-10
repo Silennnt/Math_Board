@@ -21,21 +21,19 @@ const Dashboard = () => {
 	const [previewImage, setPreviewImage] = useState(null);
 	const [zoomScale, setZoomScale] = useState(1);
 
-	// Nowy stan do przełączania widoków w panelu nauczyciela
 	const [activeTab, setActiveTab] = useState("gallery");
+	// Nowy stan do przełączania pod-zakładek w tabeli zarządzania (Oczekujący / Zatwierdzeni)
+	const [managementFilter, setManagementFilter] = useState("pending");
 
 	const isTutor = currentUser?.email === TUTOR_EMAIL;
 
-	// Zapis podstawowych danych (jeśli to uczeń)
 	useEffect(() => {
 		if (currentUser && !isTutor) {
 			const userRef = dbRef(database, `users/${currentUser.uid}`);
-			// Używamy update zamiast set, aby nie nadpisać isApproved itp.
 			update(userRef, { email: currentUser.email }).catch(console.error);
 		}
 	}, [currentUser, isTutor]);
 
-	// Pobieranie listy uczniów do zarządzania i galerii (tylko dla nauczyciela)
 	useEffect(() => {
 		if (currentUser && isTutor) {
 			const usersRef = dbRef(database, "users");
@@ -44,12 +42,8 @@ const Dashboard = () => {
 				if (data) {
 					const studentsList = Object.entries(data)
 						.map(([uid, user]) => ({ uid, ...user }))
-						.filter((user) => user.role === "student" || !user.role); // Złap wszystkich, chyba że to admin
+						.filter((user) => user.role === "student" || !user.role);
 
-					// Sortujemy: najpierw oczekujący, potem zatwierdzeni
-					studentsList.sort((a, b) =>
-						a.isApproved === b.isApproved ? 0 : a.isApproved ? 1 : -1,
-					);
 					setStudents(studentsList);
 				} else {
 					setStudents([]);
@@ -59,10 +53,8 @@ const Dashboard = () => {
 		}
 	}, [currentUser, isTutor]);
 
-	// Pobieranie zrzutów ekranu dla zaznaczonego ucznia lub aktualnego (jeśli to uczeń)
 	useEffect(() => {
 		if (!currentUser) return;
-
 		let targetUid = null;
 		if (isTutor && selectedStudent) {
 			targetUid = selectedStudent.uid;
@@ -85,7 +77,6 @@ const Dashboard = () => {
 						...data[key],
 					}))
 					.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
 				setScreenshots(loadedScreenshots);
 			} else {
 				setScreenshots([]);
@@ -110,11 +101,10 @@ const Dashboard = () => {
 			console.error("Błąd aktualizacji statusu:", err),
 		);
 	};
+
 	const deleteStudent = (uid) => {
 		if (
-			window.confirm(
-				"Czy na pewno chcesz odrzucić tego użytkownika? Zniknie on z Twojej bazy.",
-			)
+			window.confirm("Czy na pewno chcesz trwale odrzucić i usunąć to konto?")
 		) {
 			const userRef = dbRef(database, `users/${uid}`);
 			remove(userRef).catch((err) =>
@@ -124,25 +114,23 @@ const Dashboard = () => {
 	};
 
 	const handleDeleteLesson = async (shotId, shotUrl) => {
-		const confirmDelete = window.confirm(
-			"Czy na pewno chcesz trwale usunąć ten zrzut ekranu z historii?",
-		);
-		if (!confirmDelete) return;
-
+		if (
+			!window.confirm(
+				"Czy na pewno chcesz trwale usunąć ten zrzut ekranu z historii?",
+			)
+		)
+			return;
 		const targetUid = selectedStudent ? selectedStudent.uid : currentUser.uid;
-
 		try {
 			const shotDbRef = dbRef(
 				database,
 				`rooms/${targetUid}/screenshots/${shotId}`,
 			);
 			await remove(shotDbRef);
-
 			const shotStorageRef = storageRef(storage, shotUrl);
 			await deleteObject(shotStorageRef);
 		} catch (error) {
 			console.error("Błąd podczas usuwania lekcji:", error);
-			alert("Wystąpił błąd podczas usuwania. Sprawdź konsolę.");
 		}
 	};
 
@@ -163,7 +151,6 @@ const Dashboard = () => {
 			const response = await fetch(url);
 			const blob = await response.blob();
 			const objectUrl = window.URL.createObjectURL(blob);
-
 			const link = document.createElement("a");
 			link.href = objectUrl;
 			link.download = `Tablica_${dateStr.replace(/[., :\/\\]/g, "_")}.png`;
@@ -172,10 +159,6 @@ const Dashboard = () => {
 			document.body.removeChild(link);
 			window.URL.revokeObjectURL(objectUrl);
 		} catch (error) {
-			console.error(
-				"Wystąpił problem z pobieraniem w tle (CORS), otwieram w nowej karcie:",
-				error,
-			);
 			window.open(url, "_blank");
 		}
 	};
@@ -185,25 +168,21 @@ const Dashboard = () => {
 		setZoomScale(1);
 		document.body.style.overflow = "hidden";
 	};
-
 	const closePreview = () => {
 		setPreviewImage(null);
 		setZoomScale(1);
 		document.body.style.overflow = "auto";
 	};
-
 	const handleZoomIn = () => setZoomScale((prev) => Math.min(prev + 0.5, 4));
 	const handleZoomOut = () => setZoomScale((prev) => Math.max(prev - 0.5, 0.5));
 
 	const renderGallery = () => {
-		if (screenshots.length === 0) {
+		if (screenshots.length === 0)
 			return (
 				<div className="gallery-placeholder">
 					<p>Brak zapisanych zajęć.</p>
 				</div>
 			);
-		}
-
 		return (
 			<div className="gallery-grid">
 				{screenshots.map((shot) => {
@@ -259,63 +238,91 @@ const Dashboard = () => {
 	};
 
 	const renderManagementTable = () => {
+		// Filtrowanie uczniów w zależności od wybranej zakładki
+		const filteredStudents = students.filter((s) =>
+			managementFilter === "pending" ? !s.isApproved : s.isApproved,
+		);
+
 		return (
-			<div className="table-responsive" style={{ marginTop: "20px" }}>
-				<table className="users-table">
-					<thead>
-						<tr>
-							<th>Imię</th>
-							<th>Email</th>
-							<th>Status</th>
-							<th>Akcja</th>
-						</tr>
-					</thead>
-					<tbody>
-						{students.length === 0 ? (
+			<div className="management-container">
+				{/* Pod-zakładki nad tabelą */}
+				<div
+					className="management-tabs"
+					style={{ display: "flex", gap: "10px", marginBottom: "20px" }}
+				>
+					<button
+						className={`btn-filter ${managementFilter === "pending" ? "active" : ""}`}
+						onClick={() => setManagementFilter("pending")}
+					>
+						Oczekujący ({students.filter((s) => !s.isApproved).length})
+					</button>
+					<button
+						className={`btn-filter ${managementFilter === "approved" ? "active" : ""}`}
+						onClick={() => setManagementFilter("approved")}
+					>
+						Zatwierdzeni ({students.filter((s) => s.isApproved).length})
+					</button>
+				</div>
+
+				<div className="table-responsive">
+					<table className="users-table">
+						<thead>
 							<tr>
-								<td colSpan="4" className="empty-state">
-									Brak zarejestrowanych uczniów.
-								</td>
+								<th>Imię</th>
+								<th>Email</th>
+								<th>Status</th>
+								<th>Akcja</th>
 							</tr>
-						) : (
-							students.map((student) => {
-								return (
-									<tr key={student.uid}>
-										<td className="fw-bold">
-											{student.name || "Brak imienia"}
-										</td>
-										<td>{student.email}</td>
-										<td>
-											<span
-												className={`status-badge ${student.isApproved ? "approved" : "pending"}`}
-											>
-												{student.isApproved ? "Zatwierdzony" : "Oczekujący"}
-											</span>
-										</td>
-										<td>
-											<div style={{ display: "flex", gap: "8px" }}>
-												<button
-													onClick={() =>
-														toggleApproval(student.uid, student.isApproved)
-													}
-													className={`btn-action ${student.isApproved ? "btn-block" : "btn-approve"}`}
+						</thead>
+						<tbody>
+							{filteredStudents.length === 0 ? (
+								<tr>
+									<td colSpan="4" className="empty-state">
+										{managementFilter === "pending"
+											? "Brak oczekujących uczniów."
+											: "Brak zatwierdzonych uczniów."}
+									</td>
+								</tr>
+							) : (
+								filteredStudents.map((student) => {
+									return (
+										<tr key={student.uid}>
+											<td className="fw-bold">
+												{student.name || "Brak imienia"}
+											</td>
+											<td>{student.email}</td>
+											<td>
+												<span
+													className={`status-badge ${student.isApproved ? "approved" : "pending"}`}
 												>
-													{student.isApproved ? "Zablokuj" : "Zatwierdź"}
-												</button>
-												<button
-													onClick={() => deleteStudent(student.uid)}
-													className="btn-action btn-delete"
-												>
-													Odrzuć
-												</button>
-											</div>
-										</td>
-									</tr>
-								);
-							})
-						)}
-					</tbody>
-				</table>
+													{student.isApproved ? "Zatwierdzony" : "Oczekujący"}
+												</span>
+											</td>
+											<td>
+												<div style={{ display: "flex", gap: "8px" }}>
+													<button
+														onClick={() =>
+															toggleApproval(student.uid, student.isApproved)
+														}
+														className={`btn-action ${student.isApproved ? "btn-block" : "btn-approve"}`}
+													>
+														{student.isApproved ? "Zablokuj" : "Zatwierdź"}
+													</button>
+													<button
+														onClick={() => deleteStudent(student.uid)}
+														className="btn-action btn-delete"
+													>
+														Odrzuć
+													</button>
+												</div>
+											</td>
+										</tr>
+									);
+								})
+							)}
+						</tbody>
+					</table>
+				</div>
 			</div>
 		);
 	};
@@ -342,7 +349,6 @@ const Dashboard = () => {
 							<aside className="student-list-container">
 								<h2 className="section-title">Narzędzia</h2>
 
-								{/* Zakładki dla nauczyciela */}
 								<div
 									className="tutor-tabs"
 									style={{
@@ -379,22 +385,24 @@ const Dashboard = () => {
 										</h2>
 										{students.length > 0 ? (
 											<ul className="student-list">
-												{students.map((student) => (
-													<li
-														key={student.uid}
-														className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
-														onClick={() => setSelectedStudent(student)}
-													>
-														{student.email}
-													</li>
-												))}
+												{students
+													.filter((s) => s.isApproved)
+													.map((student) => (
+														<li
+															key={student.uid}
+															className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
+															onClick={() => setSelectedStudent(student)}
+														>
+															{student.email}
+														</li>
+													))}
 											</ul>
 										) : (
 											<p
 												className="gallery-placeholder"
 												style={{ padding: "20px", border: "none" }}
 											>
-												Brak aktywnych uczniów.
+												Brak zatwierdzonych uczniów.
 											</p>
 										)}
 									</>
@@ -520,7 +528,7 @@ const Dashboard = () => {
 						<div className="preview-image-container">
 							<img
 								src={previewImage}
-								alt="Podgląd pełnoekranowy"
+								alt="Podgląd"
 								style={{ transform: `scale(${zoomScale})` }}
 								className="preview-img"
 							/>
