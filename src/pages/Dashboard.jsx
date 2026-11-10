@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { signOut } from "firebase/auth";
-import { ref as dbRef, onValue, set, remove } from "firebase/database";
+import { ref as dbRef, onValue, set, remove, update } from "firebase/database";
 import { ref as storageRef, deleteObject } from "firebase/storage";
 import { auth, database, storage } from "../firebase";
 import MathBackground from "../components/MathBackground";
@@ -21,25 +21,35 @@ const Dashboard = () => {
 	const [previewImage, setPreviewImage] = useState(null);
 	const [zoomScale, setZoomScale] = useState(1);
 
+	// Nowy stan do przełączania widoków w panelu nauczyciela
+	const [activeTab, setActiveTab] = useState("gallery");
+
 	const isTutor = currentUser?.email === TUTOR_EMAIL;
 
+	// Zapis podstawowych danych (jeśli to uczeń)
 	useEffect(() => {
 		if (currentUser && !isTutor) {
 			const userRef = dbRef(database, `users/${currentUser.uid}`);
-			set(userRef, { email: currentUser.email }).catch(console.error);
+			// Używamy update zamiast set, aby nie nadpisać isApproved itp.
+			update(userRef, { email: currentUser.email }).catch(console.error);
 		}
 	}, [currentUser, isTutor]);
 
+	// Pobieranie listy uczniów do zarządzania i galerii (tylko dla nauczyciela)
 	useEffect(() => {
 		if (currentUser && isTutor) {
 			const usersRef = dbRef(database, "users");
 			const unsubscribe = onValue(usersRef, (snapshot) => {
 				const data = snapshot.val();
 				if (data) {
-					const studentsList = Object.keys(data).map((uid) => ({
-						uid,
-						email: data[uid].email,
-					}));
+					const studentsList = Object.entries(data)
+						.map(([uid, user]) => ({ uid, ...user }))
+						.filter((user) => user.role === "student" || !user.role); // Złap wszystkich, chyba że to admin
+
+					// Sortujemy: najpierw oczekujący, potem zatwierdzeni
+					studentsList.sort((a, b) =>
+						a.isApproved === b.isApproved ? 0 : a.isApproved ? 1 : -1,
+					);
 					setStudents(studentsList);
 				} else {
 					setStudents([]);
@@ -49,6 +59,7 @@ const Dashboard = () => {
 		}
 	}, [currentUser, isTutor]);
 
+	// Pobieranie zrzutów ekranu dla zaznaczonego ucznia lub aktualnego (jeśli to uczeń)
 	useEffect(() => {
 		if (!currentUser) return;
 
@@ -93,6 +104,25 @@ const Dashboard = () => {
 		}
 	};
 
+	const toggleApproval = (uid, currentStatus) => {
+		const userRef = dbRef(database, `users/${uid}`);
+		update(userRef, { isApproved: !currentStatus }).catch((err) =>
+			console.error("Błąd aktualizacji statusu:", err),
+		);
+	};
+	const deleteStudent = (uid) => {
+		if (
+			window.confirm(
+				"Czy na pewno chcesz odrzucić tego użytkownika? Zniknie on z Twojej bazy.",
+			)
+		) {
+			const userRef = dbRef(database, `users/${uid}`);
+			remove(userRef).catch((err) =>
+				console.error("Błąd usuwania konta:", err),
+			);
+		}
+	};
+
 	const handleDeleteLesson = async (shotId, shotUrl) => {
 		const confirmDelete = window.confirm(
 			"Czy na pewno chcesz trwale usunąć ten zrzut ekranu z historii?",
@@ -127,7 +157,6 @@ const Dashboard = () => {
 		});
 	};
 
-	// Wymuszenie pobierania pliku na dysk
 	const handleForceDownload = async (url, dateStr, e) => {
 		e.preventDefault();
 		try {
@@ -147,7 +176,7 @@ const Dashboard = () => {
 				"Wystąpił problem z pobieraniem w tle (CORS), otwieram w nowej karcie:",
 				error,
 			);
-			window.open(url, "_blank"); 
+			window.open(url, "_blank");
 		}
 	};
 
@@ -229,6 +258,68 @@ const Dashboard = () => {
 		);
 	};
 
+	const renderManagementTable = () => {
+		return (
+			<div className="table-responsive" style={{ marginTop: "20px" }}>
+				<table className="users-table">
+					<thead>
+						<tr>
+							<th>Imię</th>
+							<th>Email</th>
+							<th>Status</th>
+							<th>Akcja</th>
+						</tr>
+					</thead>
+					<tbody>
+						{students.length === 0 ? (
+							<tr>
+								<td colSpan="4" className="empty-state">
+									Brak zarejestrowanych uczniów.
+								</td>
+							</tr>
+						) : (
+							students.map((student) => {
+								return (
+									<tr key={student.uid}>
+										<td className="fw-bold">
+											{student.name || "Brak imienia"}
+										</td>
+										<td>{student.email}</td>
+										<td>
+											<span
+												className={`status-badge ${student.isApproved ? "approved" : "pending"}`}
+											>
+												{student.isApproved ? "Zatwierdzony" : "Oczekujący"}
+											</span>
+										</td>
+										<td>
+											<div style={{ display: "flex", gap: "8px" }}>
+												<button
+													onClick={() =>
+														toggleApproval(student.uid, student.isApproved)
+													}
+													className={`btn-action ${student.isApproved ? "btn-block" : "btn-approve"}`}
+												>
+													{student.isApproved ? "Zablokuj" : "Zatwierdź"}
+												</button>
+												<button
+													onClick={() => deleteStudent(student.uid)}
+													className="btn-action btn-delete"
+												>
+													Odrzuć
+												</button>
+											</div>
+										</td>
+									</tr>
+								);
+							})
+						)}
+					</tbody>
+				</table>
+			</div>
+		);
+	};
+
 	return (
 		<>
 			<MathBackground />
@@ -249,65 +340,128 @@ const Dashboard = () => {
 					{isTutor ? (
 						<div className="tutor-layout">
 							<aside className="student-list-container">
-								<h2 className="section-title">Twoi Uczniowie</h2>
-								{students.length > 0 ? (
-									<ul className="student-list">
-										{students.map((student) => (
-											<li
-												key={student.uid}
-												className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
-												onClick={() => setSelectedStudent(student)}
-											>
-												{student.email}
-											</li>
-										))}
-									</ul>
-								) : (
-									<p
-										className="gallery-placeholder"
-										style={{ padding: "20px", border: "none" }}
+								<h2 className="section-title">Narzędzia</h2>
+
+								{/* Zakładki dla nauczyciela */}
+								<div
+									className="tutor-tabs"
+									style={{
+										display: "flex",
+										flexDirection: "column",
+										gap: "10px",
+										marginBottom: "20px",
+									}}
+								>
+									<button
+										className={`student-item ${activeTab === "manage" ? "active" : ""}`}
+										onClick={() => {
+											setActiveTab("manage");
+											setSelectedStudent(null);
+										}}
 									>
-										Brak aktywnych uczniów.
-									</p>
+										👥 Zarządzaj uczniami
+									</button>
+									<button
+										className={`student-item ${activeTab === "gallery" ? "active" : ""}`}
+										onClick={() => setActiveTab("gallery")}
+									>
+										🖼️ Galerie zrzutów
+									</button>
+								</div>
+
+								{activeTab === "gallery" && (
+									<>
+										<h2
+											className="section-title"
+											style={{ fontSize: "1.2rem", marginTop: "20px" }}
+										>
+											Wybierz ucznia
+										</h2>
+										{students.length > 0 ? (
+											<ul className="student-list">
+												{students.map((student) => (
+													<li
+														key={student.uid}
+														className={`student-item ${selectedStudent?.uid === student.uid ? "active" : ""}`}
+														onClick={() => setSelectedStudent(student)}
+													>
+														{student.email}
+													</li>
+												))}
+											</ul>
+										) : (
+											<p
+												className="gallery-placeholder"
+												style={{ padding: "20px", border: "none" }}
+											>
+												Brak aktywnych uczniów.
+											</p>
+										)}
+									</>
 								)}
 							</aside>
 
 							<section className="student-details-container">
-								{selectedStudent ? (
-									<>
-										<div
-											className="welcome-section"
-											style={{ marginBottom: "40px" }}
-										>
-											<h1 style={{ fontSize: "1.8rem", marginBottom: "10px" }}>
-												{selectedStudent.email}
-											</h1>
-											<p style={{ marginBottom: "20px" }}>
-												Przeglądaj historię lekcji lub dołącz do aktywnej
-												tablicy ucznia.
-											</p>
-											<button
-												onClick={() => navigate(`/room/${selectedStudent.uid}`)}
-												className="btn-join-room"
-											>
-												Rozpocznij lekcję z tym uczniem
-											</button>
-										</div>
-
-										<section className="history-section">
-											<h2 className="section-title">Historia zajęć</h2>
-											{renderGallery()}
-										</section>
-									</>
-								) : (
-									<div className="welcome-section">
-										<h1>Panel Korepetytora</h1>
-										<p>
-											Wybierz ucznia z listy po lewej stronie, aby wyświetlić
-											jego profil.
+								{activeTab === "manage" && (
+									<section
+										className="dashboard-card users-card"
+										style={{
+											background: "var(--glass-bg)",
+											padding: "30px",
+											borderRadius: "var(--r2)",
+											border: "1px solid var(--glass-brd)",
+										}}
+									>
+										<h2 className="section-title">
+											Zarządzanie kontami uczniów
+										</h2>
+										<p style={{ color: "var(--muted)", marginBottom: "20px" }}>
+											Zatwierdzaj nowych uczniów, aby dać im dostęp do tablicy.
 										</p>
-									</div>
+										{renderManagementTable()}
+									</section>
 								)}
+
+								{activeTab === "gallery" &&
+									(selectedStudent ? (
+										<>
+											<div
+												className="welcome-section"
+												style={{ marginBottom: "40px" }}
+											>
+												<h1
+													style={{ fontSize: "1.8rem", marginBottom: "10px" }}
+												>
+													{selectedStudent.email}
+												</h1>
+												<p style={{ marginBottom: "20px" }}>
+													Przeglądaj historię lekcji lub dołącz do aktywnej
+													tablicy ucznia.
+												</p>
+												<button
+													onClick={() =>
+														navigate(`/room/${selectedStudent.uid}`)
+													}
+													className="btn-join-room"
+												>
+													Rozpocznij lekcję z tym uczniem
+												</button>
+											</div>
+
+											<section className="history-section">
+												<h2 className="section-title">Historia zajęć</h2>
+												{renderGallery()}
+											</section>
+										</>
+									) : (
+										<div className="welcome-section">
+											<h1>Galerie uczniów</h1>
+											<p>
+												Wybierz ucznia z listy po lewej stronie, aby wyświetlić
+												jego zrzuty ekranu i dołączyć do pokoju.
+											</p>
+										</div>
+									))}
 							</section>
 						</div>
 					) : (

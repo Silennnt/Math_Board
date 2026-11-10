@@ -129,7 +129,7 @@
 }
 
 .gallery-card {
-	background: #0d1320; 
+	background: #0d1320;
 	border: 1px solid rgba(255, 255, 255, 0.1);
 	border-radius: var(--r2);
 	overflow: hidden;
@@ -175,8 +175,8 @@
 	display: flex;
 	justify-content: space-between;
 	align-items: center;
-	background: #0f172a; 
-	backdrop-filter: none !important; 
+	background: #0f172a;
+	backdrop-filter: none !important;
 }
 
 .gallery-info span {
@@ -479,4 +479,57 @@
 	object-fit: contain;
 	transition: transform 0.2s ease-out;
 	transform-origin: center center;
+}
+.table-responsive {
+	overflow-x: auto;
+}
+.users-table {
+	width: 100%;
+	border-collapse: collapse;
+	color: var(--text);
+}
+.users-table th,
+.users-table td {
+	padding: 15px;
+	text-align: left;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+.users-table th {
+	color: var(--muted);
+	font-size: 0.85rem;
+	text-transform: uppercase;
+	letter-spacing: 1px;
+}
+.fw-bold {
+	font-weight: 600;
+}
+.empty-state {
+	text-align: center;
+	color: var(--muted);
+	padding: 40px;
+}
+.status-badge {
+	padding: 6px 12px;
+	border-radius: 20px;
+	font-size: 0.8rem;
+	font-weight: 600;
+}
+.status-badge.approved {
+	background: rgba(34, 197, 94, 0.15);
+	color: #4ade80;
+	border: 1px solid rgba(34, 197, 94, 0.3);
+}
+.status-badge.pending {
+	background: rgba(245, 158, 11, 0.15);
+	color: #fbbf24;
+	border: 1px solid rgba(245, 158, 11, 0.3);
+}
+.btn-approve {
+	background: #10b981;
+	color: #fff;
+}
+.btn-block {
+	background: transparent;
+	border: 1px solid rgba(239, 68, 68, 0.4);
+	color: #ef4444;
 }
