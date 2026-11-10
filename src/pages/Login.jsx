@@ -5,6 +5,7 @@ import { ref, get, set, update } from "firebase/database";
 import { auth, database } from "../firebase";
 import MathBackground from "../components/MathBackground";
 import "./Login.css";
+import Swal from "sweetalert2";
 
 const Login = () => {
 	const navigate = useNavigate();
@@ -55,13 +56,25 @@ const Login = () => {
 					navigate("/dashboard");
 				} else {
 					await signOut(auth);
-					setError("Twoje konto oczekuje na zatwierdzenie przez nauczyciela.");
+					Swal.fire({
+						toast: true,
+						position: "top-end",
+						icon: "warning",
+						title: "Oczekujesz na zatwierdzenie.",
+						showConfirmButton: false,
+						timer: 5000,
+					});
 				}
 			} else {
 				await signOut(auth);
-				setError(
-					"Nie znaleziono pełnego profilu. Skontaktuj się z nauczycielem.",
-				);
+				Swal.fire({
+					toast: true,
+					position: "top-end",
+					icon: "error",
+					title: "Nie znaleziono pełnego profilu.",
+					showConfirmButton: false,
+					timer: 5000,
+				});
 			}
 		} catch (err) {
 			console.error("Szczegóły błędu:", err);
@@ -71,12 +84,33 @@ const Login = () => {
 				err.code === "auth/user-not-found" ||
 				err.code === "auth/wrong-password"
 			) {
-				setError("Nieprawidłowy adres e-mail lub hasło.");
+				Swal.fire({
+					toast: true,
+					position: "top-end",
+					icon: "error",
+					title: "Nieprawidłowy adres e-mail lub hasło.",
+					showConfirmButton: false,
+					timer: 5000,
+				});
 			} else if (err.message && err.message.includes("Permission denied")) {
 				await signOut(auth);
-				setError("Twoje konto oczekuje na zatwierdzenie.");
+				Swal.fire({
+					toast: true,
+					position: "top-end",
+					icon: "warning",
+					title: "Konto oczekuje na zatwierdzenie.",
+					showConfirmButton: false,
+					timer: 5000,
+				});
 			} else {
-				setError(`Wystąpił błąd: ${err.message}`);
+				Swal.fire({
+					toast: true,
+					position: "top-end",
+					icon: "error",
+					title: `Błąd: ${err.message}`,
+					showConfirmButton: false,
+					timer: 5000,
+				});
 			}
 		} finally {
 			setIsLoading(false);
@@ -90,8 +124,6 @@ const Login = () => {
 				<div className="login-card">
 					<h1 className="login-title">Math-Board</h1>
 					<p className="login-subtitle">Panel dostępowy</p>
-
-					{error && <div className="login-error">{error}</div>}
 
 					<form onSubmit={handleLogin} className="login-form">
 						<div className="input-group">

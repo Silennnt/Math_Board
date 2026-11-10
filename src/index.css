@@ -27,7 +27,6 @@ html {
 	background-clip: padding-box;
 }
 
-/* Zabezpieczenie dla przeglądarki Firefox (korzysta z innych właściwości) */
 * {
 	scrollbar-width: thin;
 	scrollbar-color: rgba(0, 229, 255, 0.3) #0d1320;
@@ -69,4 +68,31 @@ body {
 a {
 	text-decoration: none;
 	color: inherit;
+}
+
+.swal2-popup {
+	background: rgba(13, 19, 32, 0.9) !important;
+	backdrop-filter: blur(20px) !important;
+	-webkit-backdrop-filter: blur(20px) !important;
+	border: 1px solid rgba(255, 255, 255, 0.1) !important;
+	border-radius: 16px !important;
+	color: #fff !important;
+	box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5) !important;
+}
+.swal2-title {
+	color: #fff !important;
+}
+.swal2-html-container {
+	color: #94a3b8 !important;
+}
+.swal2-confirm {
+	background: linear-gradient(90deg, #00e5ff, #a855f7) !important;
+	border: none !important;
+	border-radius: 8px !important;
+	font-weight: 600 !important;
+}
+.swal2-cancel {
+	background: rgba(255, 255, 255, 0.1) !important;
+	color: #fff !important;
+	border: none !important;
 }

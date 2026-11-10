@@ -5,6 +5,7 @@ import { ref, set } from "firebase/database";
 import { useNavigate, Link } from "react-router-dom";
 import "./Login.css";
 import MathBackground from "../components/MathBackground";
+import Swal from "sweetalert2";
 
 const Register = () => {
 	const [name, setName] = useState("");
@@ -40,9 +41,15 @@ const Register = () => {
 				createdAt: new Date().toISOString(),
 			});
 
-			alert(
-				"Konto zostało utworzone. Poczekaj na zatwierdzenie przez nauczyciela.",
-			);
+			Swal.fire({
+				toast: true,
+				position: "top-end",
+				icon: "success",
+				title:
+					"Konto zostało utworzone. Poczekaj na zatwierdzenie przez nauczyciela.",
+				showConfirmButton: false,
+				timer: 5000,
+			});
 			navigate("/login");
 		} catch (err) {
 			console.error("Błąd rejestracji:", err);

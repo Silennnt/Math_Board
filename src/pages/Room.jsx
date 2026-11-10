@@ -27,6 +27,7 @@ import {
 import { database, storage } from "../firebase";
 import { useAuth } from "../context/AuthContext";
 import "./Room.css";
+import Swal from "sweetalert2";
 const SHAPE_PATHS = {
 	square: "M0 0 H100 V100 H0 Z",
 	rectangle: "M0 25 H100 V75 H0 Z",
@@ -1084,15 +1085,28 @@ const Room = () => {
 	};
 
 	const handleClearBoard = () => {
-		if (
-			window.confirm(
-				"UWAGA: To trwale usunie wszystkie rysunki i zrzuty z obecnego cyklu (dla Ciebie i ucznia). Upewnij się, że wcześniej wykonałeś zrzut. Kontynuować?",
-			)
-		) {
-			remove(dbRef(database, `rooms/${roomId}/lines`));
-			remove(dbRef(database, `rooms/${roomId}/images`));
-			remove(dbRef(database, `rooms/${roomId}/sessionInfo`));
-		}
+		Swal.fire({
+			title: "Czyszczenie tablicy",
+			text: "To trwale usunie wszystkie rysunki i zrzuty z obecnego cyklu. Upewnij się, że masz zapisany zrzut.",
+			icon: "warning",
+			showCancelButton: true,
+			confirmButtonText: "Wyczyść",
+			cancelButtonText: "Anuluj",
+		}).then((result) => {
+			if (result.isConfirmed) {
+				remove(dbRef(database, `rooms/${roomId}/lines`));
+				remove(dbRef(database, `rooms/${roomId}/images`));
+				remove(dbRef(database, `rooms/${roomId}/sessionInfo`));
+				Swal.fire({
+					toast: true,
+					position: "top-end",
+					icon: "success",
+					title: "Tablica wyczyszczona",
+					showConfirmButton: false,
+					timer: 5000,
+				});
+			}
+		});
 	};
 
 	const handleSaveScreenshot = async () => {
@@ -1185,11 +1199,23 @@ const Room = () => {
 				createdAt: lessonDate,
 			});
 
-			alert(
-				"Pomyślnie wygenerowano i zapisano pełny zrzut tablicy w historii ucznia.",
-			);
+			Swal.fire({
+				toast: true,
+				position: "top-end",
+				icon: "success",
+				title: "Zapisano zrzut tablicy!",
+				showConfirmButton: false,
+				timer: 5000,
+			});
 		} catch (error) {
-			alert("Wystąpił błąd podczas generowania zrzutu ekranu.");
+			wal.fire({
+				toast: true,
+				position: "top-end",
+				icon: "error",
+				title: "Błąd generowania zrzutu",
+				showConfirmButton: false,
+				timer: 5000,
+			});
 		} finally {
 			setIsSaving(false);
 		}

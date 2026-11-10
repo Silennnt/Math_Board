@@ -7,6 +7,7 @@ import { auth, database, storage } from "../firebase";
 import MathBackground from "../components/MathBackground";
 import { useAuth } from "../context/AuthContext";
 import "./Dashboard.css";
+import Swal from "sweetalert2";
 
 const TUTOR_EMAIL = "dawidchrzaszcz64@gmail.com";
 
@@ -102,35 +103,64 @@ const Dashboard = () => {
 	};
 
 	const deleteStudent = (uid) => {
-		if (
-			window.confirm("Czy na pewno chcesz trwale odrzucić i usunąć to konto?")
-		) {
-			const userRef = dbRef(database, `users/${uid}`);
-			remove(userRef).catch((err) =>
-				console.error("Błąd usuwania konta:", err),
-			);
-		}
+		Swal.fire({
+			title: "Odrzucenie ucznia",
+			text: "Czy na pewno chcesz usunąć to konto?",
+			icon: "warning",
+			showCancelButton: true,
+			confirmButtonColor: "#ef4444",
+			confirmButtonText: "Usuń",
+			cancelButtonText: "Anuluj",
+		}).then((result) => {
+			if (result.isConfirmed) {
+				const userRef = dbRef(database, `users/${uid}`);
+				remove(userRef).catch((err) => console.error(err));
+				Swal.fire({
+					toast: true,
+					position: "top-end",
+					icon: "success",
+					title: "Konto usunięte",
+					showConfirmButton: false,
+					timer: 3000,
+				});
+			}
+		});
 	};
-
 	const handleDeleteLesson = async (shotId, shotUrl) => {
-		if (
-			!window.confirm(
-				"Czy na pewno chcesz trwale usunąć ten zrzut ekranu z historii?",
-			)
-		)
-			return;
-		const targetUid = selectedStudent ? selectedStudent.uid : currentUser.uid;
-		try {
-			const shotDbRef = dbRef(
-				database,
-				`rooms/${targetUid}/screenshots/${shotId}`,
-			);
-			await remove(shotDbRef);
-			const shotStorageRef = storageRef(storage, shotUrl);
-			await deleteObject(shotStorageRef);
-		} catch (error) {
-			console.error("Błąd podczas usuwania lekcji:", error);
-		}
+		Swal.fire({
+			title: "Usuwanie zrzutu",
+			text: "Czy trwale usunąć zrzut ekranu z historii?",
+			icon: "warning",
+			showCancelButton: true,
+			confirmButtonColor: "#ef4444",
+			confirmButtonText: "Usuń",
+			cancelButtonText: "Anuluj",
+		}).then(async (result) => {
+			if (result.isConfirmed) {
+				const targetUid = selectedStudent
+					? selectedStudent.uid
+					: currentUser.uid;
+				try {
+					const shotDbRef = dbRef(
+						database,
+						`rooms/${targetUid}/screenshots/${shotId}`,
+					);
+					await remove(shotDbRef);
+					const shotStorageRef = storageRef(storage, shotUrl);
+					await deleteObject(shotStorageRef);
+					Swal.fire({
+						toast: true,
+						position: "top-end",
+						icon: "success",
+						title: "Usunięto zrzut",
+						showConfirmButton: false,
+						timer: 3000,
+					});
+				} catch (error) {
+					console.error("Błąd podczas usuwania lekcji:", error);
+				}
+			}
+		});
 	};
 
 	const formatDate = (isoString) => {
