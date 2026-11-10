@@ -905,7 +905,7 @@ const Room = () => {
 				const dy = logicalPos.y - lastY;
 
 				const distSq = dx * dx + dy * dy;
-				const threshold = 49 / (stageConfig.scale * stageConfig.scale);
+				const threshold = 25 / (stageConfig.scale * stageConfig.scale);
 
 				if (distSq < threshold) {
 					return prev;

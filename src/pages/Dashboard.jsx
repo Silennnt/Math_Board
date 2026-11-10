@@ -9,7 +9,7 @@ import {
 	update,
 	push,
 } from "firebase/database";
-import { ref as storageRef, deleteObject } from "firebase/storage";
+import { ref as storageRef, deleteObject, listAll } from "firebase/storage";
 import { auth, database, storage } from "../firebase";
 import MathBackground from "../components/MathBackground";
 import { useAuth } from "../context/AuthContext";
@@ -141,24 +141,65 @@ const Dashboard = () => {
 	const deleteStudent = (uid) => {
 		Swal.fire({
 			title: "Odrzucenie ucznia",
-			text: "Czy na pewno chcesz usunąć to konto?",
+			text: "Czy na pewno chcesz usunąć to konto? Zostanie również trwale usunięta cała historia jego tablicy oraz wszystkie pliki i zrzuty ekranu.",
 			icon: "warning",
 			showCancelButton: true,
 			confirmButtonColor: "#ef4444",
-			confirmButtonText: "Usuń",
+			confirmButtonText: "Usuń całkowicie",
 			cancelButtonText: "Anuluj",
-		}).then((result) => {
+		}).then(async (result) => {
 			if (result.isConfirmed) {
-				const userRef = dbRef(database, `users/${uid}`);
-				remove(userRef).catch((err) => console.error(err));
-				Swal.fire({
-					toast: true,
-					position: "top-end",
-					icon: "success",
-					title: "Konto usunięte",
-					showConfirmButton: false,
-					timer: 4000,
-				});
+				try {
+					await remove(dbRef(database, `users/${uid}`));
+					await remove(dbRef(database, `rooms/${uid}`));
+
+					const screenshotsRef = storageRef(
+						storage,
+						`rooms/${uid}/screenshots`,
+					);
+					try {
+						const { items } = await listAll(screenshotsRef);
+						const deletePromises = items.map((itemRef) =>
+							deleteObject(itemRef),
+						);
+						await Promise.all(deletePromises);
+					} catch (storageErr) {
+						console.warn(
+							"Brak zrzutów do usunięcia lub błąd Storage:",
+							storageErr,
+						);
+					}
+
+					const uploadsRef = storageRef(storage, `rooms/${uid}/uploads`);
+					try {
+						const { items } = await listAll(uploadsRef);
+						const deletePromises = items.map((itemRef) =>
+							deleteObject(itemRef),
+						);
+						await Promise.all(deletePromises);
+					} catch (storageErr) {
+						console.warn("Brak wklejonych obrazków do usunięcia:", storageErr);
+					}
+
+					Swal.fire({
+						toast: true,
+						position: "top-end",
+						icon: "success",
+						title: "Konto i wszystkie dane zostały trwale usunięte.",
+						showConfirmButton: false,
+						timer: 4000,
+					});
+				} catch (error) {
+					console.error("Błąd podczas kaskadowego usuwania ucznia:", error);
+					Swal.fire({
+						toast: true,
+						position: "top-end",
+						icon: "error",
+						title: "Błąd podczas usuwania. Sprawdź konsolę.",
+						showConfirmButton: false,
+						timer: 4000,
+					});
+				}
 			}
 		});
 	};
