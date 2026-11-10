@@ -4,6 +4,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Room from "./pages/Room";
+import Register from "./pages/Register";
 
 function App() {
 	return (
@@ -12,7 +13,7 @@ function App() {
 				<Routes>
 					<Route path="/" element={<Navigate to="/dashboard" replace />} />
 					<Route path="/login" element={<Login />} />
-
+					<Route path="/register" element={<Register />} />
 					<Route
 						path="/dashboard"
 						element={

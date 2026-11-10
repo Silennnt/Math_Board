@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { auth } from "../firebase";
 import MathBackground from "../components/MathBackground";
+import { Link } from "react-router-dom";
 import "./Login.css";
 
 const Login = () => {
@@ -60,6 +61,15 @@ const Login = () => {
 						<button type="submit" className="login-btn">
 							Zaloguj się
 						</button>
+						<p
+							className="auth-switch"
+							style={{ marginTop: "15px", textAlign: "center" }}
+						>
+							Nie masz konta?{" "}
+							<Link to="/register" style={{ color: "var(--cyan)" }}>
+								Zarejestruj się
+							</Link>
+						</p>
 					</form>
 				</div>
 			</div>
