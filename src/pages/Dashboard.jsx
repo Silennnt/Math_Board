@@ -90,37 +90,27 @@ const Dashboard = () => {
 	}, [currentUser, isTutor, selectedStudent, activeStudentGallery]);
 
 	useEffect(() => {
-		if (!currentUser) return;
-		let targetUid = null;
-		if (isTutor && selectedStudent) {
-			targetUid = selectedStudent.uid;
-		} else if (!isTutor) {
-			targetUid = currentUser.uid;
-		}
+		if (!currentUser || !isTutor) return;
 
-		if (!targetUid) {
-			setScreenshots([]);
-			return;
-		}
-
-		const screenshotsDbRef = dbRef(database, `rooms/${targetUid}/screenshots`);
-		const unsubscribe = onValue(screenshotsDbRef, (snapshot) => {
-			const data = snapshot.val();
-			if (data) {
-				const loadedScreenshots = Object.keys(data)
+		const usersRef = dbRef(database, "users");
+		const unsubscribe = onValue(usersRef, (snapshot) => {
+			if (snapshot.exists()) {
+				const data = snapshot.val();
+				const loadedStudents = Object.keys(data)
 					.map((key) => ({
-						id: key,
+						uid: key,
 						...data[key],
 					}))
-					.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-				setScreenshots(loadedScreenshots);
+					.filter((user) => user.email !== TUTOR_EMAIL);
+
+				setStudents(loadedStudents);
 			} else {
-				setScreenshots([]);
+				setStudents([]);
 			}
 		});
 
 		return () => unsubscribe();
-	}, [currentUser, isTutor, selectedStudent]);
+	}, [currentUser, isTutor]);
 
 	const handleLogout = async () => {
 		try {
