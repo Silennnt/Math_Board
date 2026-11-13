@@ -940,19 +940,31 @@ const Room = () => {
 			activeIds = [id];
 			setSelectedIds(activeIds);
 		}
-		const stage = stageRef.current;
+
+		if (activeIds.length > 1 && transformerRef.current) {
+			transformerRef.current.nodes([]);
+		}
+
+		const layer = transformerRef.current
+			? transformerRef.current.getLayer()
+			: stageRef.current.getLayers()[1];
+		const selectedSet = new Set(activeIds);
 		const cached = [];
-		activeIds.forEach((selId) => {
-			const node = stage.findOne("#" + selId);
-			if (node) {
-				cached.push({
-					id: selId,
-					node: node,
-					startX: node.x(),
-					startY: node.y(),
-				});
-			}
-		});
+
+		if (layer) {
+			layer.getChildren().forEach((node) => {
+				const nodeId = node.id();
+				if (nodeId && selectedSet.has(nodeId)) {
+					cached.push({
+						id: nodeId,
+						node: node,
+						startX: node.x(),
+						startY: node.y(),
+					});
+				}
+			});
+		}
+
 		dragNodesRef.current = cached;
 	};
 
@@ -962,19 +974,26 @@ const Room = () => {
 		const dx = e.target.x() - leader.startX;
 		const dy = e.target.y() - leader.startY;
 
-		dragNodesRef.current.forEach((item) => {
+		for (let i = 0; i < dragNodesRef.current.length; i++) {
+			const item = dragNodesRef.current[i];
 			if (item.id !== id) {
-				item.node.x(item.startX + dx);
-				item.node.y(item.startY + dy);
+				item.node.position({
+					x: item.startX + dx,
+					y: item.startY + dy,
+				});
 			}
-		});
+		}
 	};
 
 	const handleDragEnd = (e, id) => {
 		const updates = {};
+		const restoredNodes = [];
+
 		dragNodesRef.current.forEach((item) => {
 			const selId = item.id;
 			const node = item.node;
+			restoredNodes.push(node);
+
 			const isLine = linesRef.current.some((l) => l.id === selId);
 			const isImg = imagesRef.current.some((i) => i.id === selId);
 			const isText = textsRef.current.some((t) => t.id === selId);
@@ -992,6 +1011,15 @@ const Room = () => {
 		});
 
 		dragNodesRef.current = [];
+
+		if (
+			tool === "select" &&
+			transformerRef.current &&
+			restoredNodes.length > 0
+		) {
+			transformerRef.current.nodes(restoredNodes);
+			transformerRef.current.getLayer()?.batchDraw();
+		}
 
 		if (Object.keys(updates).length > 0) {
 			update(dbRef(database, `rooms/${roomId}`), updates).catch(() => {});
@@ -2354,6 +2382,8 @@ const Room = () => {
 										? (line.thickness || 4) * 4
 										: line.thickness || 4,
 								opacity: line.tool === "highlighter" ? 0.4 : 1,
+								perfectDrawEnabled: false,
+								shadowForStrokeEnabled: false,
 								draggable: tool === "select",
 								listening: tool === "select" || tool === "eraser-object",
 								onDragStart: (e) => handleDragStart(e, line.id),
