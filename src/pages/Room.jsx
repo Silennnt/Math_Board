@@ -172,7 +172,7 @@ const Room = () => {
 
 	const [selectedIds, setSelectedIds] = useState([]);
 	const [selectionBox, setSelectionBox] = useState(null);
-
+	const [placeholders, setPlaceholders] = useState([]);
 	const isTextDrawing = useRef(false);
 	const textDragStart = useRef(null);
 	const [textDragBox, setTextDragBox] = useState(null);
@@ -626,6 +626,10 @@ const Room = () => {
 			center: { x: cx, y: cy },
 		};
 		setContextMenu(null);
+
+		try {
+			navigator.clipboard.writeText("board-internal-copy").catch(() => {});
+		} catch (err) {}
 	};
 
 	const handleInternalPaste = (targetPos = null) => {
@@ -751,8 +755,6 @@ const Room = () => {
 				} else if (key === "c") {
 					e.preventDefault();
 					handleCopy();
-				} else if (key === "v") {
-					handleInternalPaste();
 				}
 			} else if (e.key === "Delete" || e.key === "Backspace") {
 				handleDeleteSelected();
@@ -764,63 +766,86 @@ const Room = () => {
 			const clipboardData = e.clipboardData || window.clipboardData;
 			if (!clipboardData) return;
 
+			const textData = clipboardData.getData("text");
+			if (textData === "board-internal-copy") {
+				e.preventDefault();
+				handleInternalPaste();
+				return;
+			}
+
 			const items = clipboardData.items;
 			let hasImage = false;
-			const batchTimestamp = Date.now();
+			let imageBlob = null;
 
 			for (let i = 0; i < items.length; i++) {
 				if (items[i].type.indexOf("image") !== -1) {
 					hasImage = true;
-					const blob = items[i].getAsFile();
-					if (!blob) continue;
-
-					const localUrl = URL.createObjectURL(blob);
-					const img = new window.Image();
-
-					img.onload = async () => {
-						try {
-							const fileRef = storageRef(
-								storage,
-								`rooms/${roomId}/uploads/paste_${Date.now()}.png`,
-							);
-							await uploadBytes(fileRef, blob);
-							const downloadUrl = await getDownloadURL(fileRef);
-
-							const config = stageConfigRef.current;
-							let containerRect = { left: 0, top: 0 };
-							if (containerRef.current) {
-								containerRect = containerRef.current.getBoundingClientRect();
-							}
-							const pointerX = globalMousePos.current.x - containerRect.left;
-							const pointerY = globalMousePos.current.y - containerRect.top;
-
-							const x = (pointerX - config.x) / config.scale - img.width / 2;
-							const y = (pointerY - config.y) / config.scale - img.height / 2;
-
-							const imgDbRef = dbRef(database, `rooms/${roomId}/images`);
-							await push(imgDbRef, {
-								url: downloadUrl,
-								x,
-								y,
-								scaleX: 1,
-								scaleY: 1,
-								rotation: 0,
-								width: img.width,
-								height: img.height,
-								uid: currentUser?.uid,
-								timestamp: batchTimestamp,
-							});
-						} catch (error) {
-						} finally {
-							URL.revokeObjectURL(localUrl);
-						}
-					};
-					img.src = localUrl;
+					imageBlob = items[i].getAsFile();
+					break;
 				}
 			}
 
-			if (hasImage) {
+			if (hasImage && imageBlob) {
 				e.preventDefault();
+				const localUrl = URL.createObjectURL(imageBlob);
+				const img = new window.Image();
+
+				img.onload = async () => {
+					const tempId = "placeholder_" + Date.now();
+					const config = stageConfigRef.current;
+					let containerRect = { left: 0, top: 0 };
+					if (containerRef.current) {
+						containerRect = containerRef.current.getBoundingClientRect();
+					}
+					const pointerX = globalMousePos.current.x - containerRect.left;
+					const pointerY = globalMousePos.current.y - containerRect.top;
+
+					const x = (pointerX - config.x) / config.scale - img.width / 2;
+					const y = (pointerY - config.y) / config.scale - img.height / 2;
+
+					setPlaceholders((prev) => [
+						...prev,
+						{ id: tempId, x, y, width: img.width, height: img.height },
+					]);
+
+					try {
+						const fileRef = storageRef(
+							storage,
+							`rooms/${roomId}/uploads/paste_${Date.now()}.png`,
+						);
+						await uploadBytes(fileRef, imageBlob);
+						const downloadUrl = await getDownloadURL(fileRef);
+
+						const batchTimestamp = Date.now();
+						const imgDbRef = dbRef(database, `rooms/${roomId}/images`);
+						await push(imgDbRef, {
+							url: downloadUrl,
+							x,
+							y,
+							scaleX: 1,
+							scaleY: 1,
+							rotation: 0,
+							width: img.width,
+							height: img.height,
+							uid: currentUser?.uid,
+							timestamp: batchTimestamp,
+						});
+					} catch (error) {
+						console.error("Błąd podczas wklejania:", error);
+					} finally {
+						URL.revokeObjectURL(localUrl);
+						setPlaceholders((prev) => prev.filter((p) => p.id !== tempId));
+					}
+				};
+				img.src = localUrl;
+			} else {
+				if (
+					internalClipboard.current.lines.length > 0 ||
+					internalClipboard.current.images.length > 0 ||
+					internalClipboard.current.texts.length > 0
+				) {
+					handleInternalPaste();
+				}
 			}
 		};
 
@@ -2188,6 +2213,47 @@ const Room = () => {
 					</Layer>
 
 					<Layer>
+						{placeholders.flatMap((p) => [
+							<Rect
+								key={`${p.id}_bg`}
+								x={p.x}
+								y={p.y}
+								width={p.width}
+								height={p.height}
+								fill={
+									bgTheme === "dark"
+										? "rgba(255, 255, 255, 0.05)"
+										: "rgba(0, 0, 0, 0.05)"
+								}
+								stroke={
+									bgTheme === "dark"
+										? "rgba(255, 255, 255, 0.2)"
+										: "rgba(0, 0, 0, 0.2)"
+								}
+								strokeWidth={2}
+								dash={[8, 8]}
+								listening={false}
+							/>,
+							<KonvaText
+								key={`${p.id}_txt`}
+								x={p.x}
+								y={p.y}
+								width={p.width}
+								height={p.height}
+								text="Wklejanie..."
+								align="center"
+								verticalAlign="middle"
+								fill={
+									bgTheme === "dark"
+										? "rgba(255, 255, 255, 0.4)"
+										: "rgba(0, 0, 0, 0.4)"
+								}
+								fontSize={Math.max(14, p.width * 0.08)}
+								fontFamily="system-ui, -apple-system, sans-serif"
+								listening={false}
+							/>,
+						])}
+
 						{images.map((img) => (
 							<URLImage
 								key={img.id}
