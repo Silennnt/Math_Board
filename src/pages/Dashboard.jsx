@@ -866,7 +866,7 @@ const Dashboard = () => {
 							<img
 								src={previewImage}
 								alt="Podgląd"
-								style={{ transform: `scale(${zoomScale})` }}
+								style={{ width: `${zoomScale * 100}%`, height: "auto" }}
 								className="preview-img"
 							/>
 						</div>
