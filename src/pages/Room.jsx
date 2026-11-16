@@ -607,11 +607,18 @@ const Room = () => {
 			selectedIds.forEach((id) => {
 				const node = stage.findOne("#" + id);
 				if (node) {
-					const rect = node.getClientRect({ skipTransform: true });
-					if (rect.x < minX) minX = rect.x;
-					if (rect.y < minY) minY = rect.y;
-					if (rect.x + rect.width > maxX) maxX = rect.x + rect.width;
-					if (rect.y + rect.height > maxY) maxY = rect.y + rect.height;
+					const rect = node.getClientRect();
+					const config = stageConfigRef.current;
+
+					const lx = (rect.x - config.x) / config.scale;
+					const ly = (rect.y - config.y) / config.scale;
+					const lw = rect.width / config.scale;
+					const lh = rect.height / config.scale;
+
+					if (lx < minX) minX = lx;
+					if (ly < minY) minY = ly;
+					if (lx + lw > maxX) maxX = lx + lw;
+					if (ly + lh > maxY) maxY = ly + lh;
 				}
 			});
 		}
